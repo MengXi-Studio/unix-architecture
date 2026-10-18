@@ -1,0 +1,13 @@
+/**
+ * 本文件由 @meng-xi/unix-router/vite-plugin 自动生成，请勿整体手改。
+ * preserveRouteChanges 已开启：重新生成时保留你追加的自定义字段与整条自定义路由；
+ * 页面级声明请使用页面内的 defineUniPage 宏或 <route-config> 块。
+ */
+import type { RouteConfig } from '@/uni_modules/ux-router/utssdk/index.uts'
+
+export const routes: RouteConfig[] = [
+	{
+		path: 'pages/index/index',
+		name: 'index',
+	},
+]

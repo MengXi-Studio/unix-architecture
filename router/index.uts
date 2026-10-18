@@ -1,0 +1,9 @@
+import { createRouter } from '@/uni_modules/ux-router/utssdk/index.uts'
+import { routes } from './routes.gen.uts'
+
+const router = createRouter({
+	routes,
+	strict: true
+})
+
+export default router

@@ -1,0 +1,58 @@
+/**
+ * 鉴权令牌读写（对标 vue-admin-template src/utils/auth.js）
+ *
+ * 技术差异说明：js-cookie 为同步读写，ux-storage 为异步持久化——
+ * 用「内存缓存 + 异步落盘」对齐原版的同步取用体验：
+ * - 内存缓存提供同步读入口（请求拦截器 / 守卫直接取，无异步开销）
+ * - 持久层异步写入，失败仅记日志（下次登录会重新写入）
+ * - 冷启动经 ensureAuthReady 等待恢复完成，守卫链首跳无竞态
+ */
+import { set, get, remove } from '@/uni_modules/ux-storage'
+
+/** 持久层 key（ux-storage 自动附加 mx_storage: 前缀） */
+const TOKEN_KEY = 'app_token'
+
+/** 内存缓存（同步读入口） */
+let cachedToken: string | null = null
+
+/** 恢复完成信号（复用同一 Promise，保证只读一次持久层） */
+let readyPromise: Promise<boolean> | null = null
+
+/** 从持久层恢复 token 到内存；多次调用复用首次结果 */
+export function ensureAuthReady(): Promise<boolean> {
+	if (readyPromise != null) {
+		return readyPromise!
+	}
+	readyPromise = get(TOKEN_KEY).then((raw): boolean => {
+		if (raw != null) {
+			cachedToken = raw as string
+			return true
+		}
+		return false
+	}).catch((err): boolean => {
+		console.error('[auth] token 恢复失败：' + `${err}`)
+		return false
+	})
+	return readyPromise!
+}
+
+/** 读当前 token（同步；冷启动请先 await ensureAuthReady） */
+export function getToken(): string | null {
+	return cachedToken
+}
+
+/** 写 token（内存即时生效，持久层异步落盘） */
+export function setToken(token: string): void {
+	cachedToken = token
+	set(TOKEN_KEY, token, null).catch((err) => {
+		console.error('[auth] token 持久化失败：' + `${err}`)
+	})
+}
+
+/** 清除 token */
+export function removeToken(): void {
+	cachedToken = null
+	remove(TOKEN_KEY).catch((err) => {
+		console.error('[auth] token 清理失败：' + `${err}`)
+	})
+}

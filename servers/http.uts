@@ -1,0 +1,75 @@
+/**
+ * servers 层 HTTP 核心封装（基于 mx-request；对标 vue-admin-template src/utils/request.js）
+ *
+ * 职责：全局默认配置、鉴权令牌注入、统一错误提示。
+ * - 配置来源 settings.uts（全局唯一配置源，对标 process.env / config 注入）
+ * - token 读写交给 utils/auth.uts（对标 utils/auth.js 与 request.js 的关系）
+ * - 业务 API 一律落在 servers/api/<domain>.uts（对标 src/api/*.js），页面不直连网络层
+ */
+import { configureRequest, useRequestInterceptor, useResponseInterceptor } from '@/uni_modules/mx-request'
+import type { RequestConfig, RequestError } from '@/uni_modules/mx-request'
+import { settings } from '@/settings.uts'
+import { getToken } from '@/utils/auth.uts'
+
+/** 是否已完成初始化（防止拦截器重复注册导致双重提示） */
+let initialized = false
+
+/** 错误码 → 用户可读文案 */
+function friendlyMessage(err: RequestError): string {
+	if (err.code == 'ERR_TIMEOUT') {
+		return '请求超时，请稍后重试'
+	}
+	if (err.code == 'ERR_NETWORK') {
+		return '网络连接失败，请检查网络'
+	}
+	if (err.statusCode != null) {
+		return '服务异常（' + err.statusCode!.toString() + '）'
+	}
+	return '请求失败，请稍后重试'
+}
+
+/**
+ * 初始化网络层（main.uts createApp 内经 setupServers 调用一次）
+ * 幂等：重复调用直接跳过
+ */
+export function initHttp(): void {
+	if (initialized) {
+		return
+	}
+	initialized = true
+
+	// 全局默认配置（null 字段沿用库内置默认）
+	configureRequest({
+		baseURL: settings.baseURL,
+		timeout: settings.timeout,
+		header: { 'Content-Type': 'application/json' } as UTSJSONObject,
+		validateStatus: null
+	})
+
+	// 请求拦截器：注入鉴权头（token 经 utils/auth.uts 提供；请求级同名键可覆盖）
+	useRequestInterceptor((config: RequestConfig): RequestConfig => {
+		const token = getToken()
+		if (token != null && token!.length > 0) {
+			let header = { } as UTSJSONObject
+			if (config.header != null) {
+				header = config.header!
+			}
+			header['Authorization'] = 'Bearer ' + token!
+			config.header = header
+		}
+		return config
+	})
+
+	// 响应拦截器：统一错误提示（主动取消不打扰用户）；
+	// 返回 null 放行，错误继续 reject 给调用方做业务处理
+	useResponseInterceptor(null, (err: RequestError): any | null => {
+		if (err.code != 'ERR_CANCELED') {
+			uni.showToast({
+				title: friendlyMessage(err),
+				icon: 'none'
+			})
+		}
+		console.error('[servers] 请求失败：' + err.code + ' ' + err.errMsg)
+		return null
+	})
+}

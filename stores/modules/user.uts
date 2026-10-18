@@ -1,0 +1,66 @@
+/**
+ * 用户模块（对标 vue-admin-template src/store/modules/user.js）
+ *
+ * state：token / name / avatar（Ref）
+ * action：loginAction（登录 + 持久化）/ getInfoAction / logoutAction / resetToken
+ * 说明：setup 式 store 中 getter 即 ComputedRef，本模块暂无派生值；
+ *      token 持久化委托 utils/auth.uts（对标 js-cookie 职责分离）。
+ */
+import type { Ref } from 'vue'
+import { defineStore } from '@/uni_modules/ux-pinia'
+import { login, getInfo, logout } from '@/servers/api/user.uts'
+import { setToken as persistToken, removeToken as clearPersistedToken } from '@/utils/auth.uts'
+
+export type UserStore = {
+	token: Ref<string>,
+	name: Ref<string>,
+	avatar: Ref<string>,
+	loginAction: (username: string, password: string) => Promise<void>,
+	getInfoAction: () => Promise<void>,
+	logoutAction: () => Promise<void>,
+	resetToken: () => void
+}
+
+export const useUserStore = defineStore<UserStore>('user', (): UserStore => {
+	const token: Ref<string> = ref('')
+	const name: Ref<string> = ref('')
+	const avatar: Ref<string> = ref('')
+
+	/** 登录：成功后 token 写入 store 与持久层 */
+	const loginAction = async (username: string, password: string): Promise<void> => {
+		const res = await login(username, password)
+		const t = res.data['token'] as string
+		token.value = t
+		persistToken(t)
+	}
+
+	/** 拉取用户信息 */
+	const getInfoAction = async (): Promise<void> => {
+		const res = await getInfo()
+		name.value = res.data['name'] as string
+		avatar.value = res.data['avatar'] as string
+	}
+
+	/** 退出登录：调接口后强制清本地状态（接口失败不阻断退出） */
+	const logoutAction = async (): Promise<void> => {
+		try {
+			await logout()
+		} catch (e) {
+			console.warn('[store:user] logout 接口失败，仍执行本地清理：' + `${e}`)
+		}
+		token.value = ''
+		name.value = ''
+		avatar.value = ''
+		clearPersistedToken()
+	}
+
+	/** 仅清本地登录态（守卫 getInfo 失败路径使用，对标 user/resetToken） */
+	const resetToken = (): void => {
+		token.value = ''
+		name.value = ''
+		avatar.value = ''
+		clearPersistedToken()
+	}
+
+	return { token, name, avatar, loginAction, getInfoAction, logoutAction, resetToken } as UserStore
+})

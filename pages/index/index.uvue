@@ -1,15 +1,36 @@
 <template>
-	<view>
+	<view class="page">
 		<image class="logo" src="/static/logo.png"></image>
-		<text class="title">{{title}}</text>
+		<text class="title">{{ title }}</text>
+		<text class="welcome" v-if="name.length > 0">欢迎，{{ name }}</text>
+		<button class="logout-btn" @click="handleLogout">退出登录</button>
 	</view>
 </template>
 
 <script setup lang="uts">
-	const title = ref('Hello')
+import { useRouter } from '@/uni_modules/ux-router/utssdk/index.uts'
+import { storeToRefs } from '@/uni_modules/ux-pinia'
+import { useUserStore } from '@/stores/index.uts'
+
+const userStore = useUserStore()
+const { name } = storeToRefs(userStore)
+const router = useRouter()
+const title = ref('Hello')
+
+const handleLogout = (): void => {
+	userStore.logoutAction().then(() => {
+		router.relaunch('/pages/login/login')
+	}).catch((_e) => {
+		console.error('[index] logout 异常')
+	})
+}
 </script>
 
 <style>
+	.page {
+		flex: 1;
+	}
+
 	.logo {
 		height: 100px;
 		width: 100px;
@@ -20,5 +41,16 @@
 		font-size: 18px;
 		color: #8f8f94;
 		text-align: center;
+	}
+
+	.welcome {
+		font-size: 14px;
+		color: #303133;
+		text-align: center;
+		margin-top: 12px;
+	}
+
+	.logout-btn {
+		margin: 40px 40px 0 40px;
 	}
 </style>

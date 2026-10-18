@@ -1,0 +1,74 @@
+<template>
+	<view class="page">
+		<text class="app-name">{{ appName }}</text>
+		<input class="input" type="text" v-model="username" placeholder="用户名" />
+		<input class="input" type="text" :password="true" v-model="password" placeholder="密码" />
+		<button class="login-btn" type="primary" :disabled="loading" @click="handleLogin">
+			{{ loading ? '登录中…' : '登录' }}
+		</button>
+	</view>
+</template>
+
+<script setup lang="uts">
+import { useRouter, useRoute } from '@/uni_modules/ux-router/utssdk/index.uts'
+import { useUserStore } from '@/stores/index.uts'
+import { settings } from '@/settings.uts'
+
+defineUniPage({
+	name: 'login',
+	title: '登录'
+})
+
+const router = useRouter()
+const route = useRoute()
+const userStore = useUserStore()
+const appName = settings.appName
+
+const username = ref('admin')
+const password = ref('123456')
+const loading = ref(false)
+
+const handleLogin = (): void => {
+	if (loading.value) {
+		return
+	}
+	loading.value = true
+	userStore.loginAction(username.value, password.value).then(() => {
+		// 守卫登记的 redirect 优先；无则回首页
+		const target = route.query.get('redirect') ?? '/pages/index/index'
+		router.relaunch(target)
+	}).catch((_e) => {
+		// 失败提示由网络层统一 toast，这里仅复位加载态
+		loading.value = false
+	})
+}
+</script>
+
+<style>
+	.page {
+		flex: 1;
+		padding: 40px;
+		justify-content: center;
+	}
+
+	.app-name {
+		font-size: 22px;
+		font-weight: bold;
+		color: #303133;
+		text-align: center;
+		margin-bottom: 40px;
+	}
+
+	.input {
+		height: 44px;
+		border: 1px solid #dcdfe6;
+		border-radius: 4px;
+		padding: 0 12px;
+		margin-bottom: 12px;
+		font-size: 14px;
+	}
+
+	.login-btn {
+		margin-top: 16px;
+	}
+</style>

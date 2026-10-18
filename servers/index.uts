@@ -1,0 +1,17 @@
+/**
+ * servers 层统一出口
+ *
+ * 分层约定（对标 vue-admin-template：utils/request.js + src/api/*.js）：
+ * - http.uts：HTTP 核心封装（全局配置 / 拦截器），全局唯一，业务不重复配置
+ * - api/<domain>.uts：领域接口模块，薄封装（仅转发请求与收敛路径）
+ * - 令牌读写经 utils/auth.uts（http 拦截器与守卫共用）
+ * - 调用链：页面 → store action → servers/api → mx-request，页面不直连网络层
+ */
+import { initHttp } from './http.uts'
+
+/**
+ * 应用启动时初始化网络层（main.uts createApp 内调用一次；幂等）
+ */
+export function setupServers(): void {
+	initHttp()
+}

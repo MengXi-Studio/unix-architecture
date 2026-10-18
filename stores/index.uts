@@ -1,0 +1,7 @@
+/**
+ * store 统一出口（对标 vue-admin-template src/store/index.js）
+ *
+ * 差异说明：Vuex 需要单实例聚合注册，ux-pinia 为免挂载设计（模块级注册表
+ * 即全局单例），故本文件仅作消费方统一导入入口；新增模块在此追加一行导出。
+ */
+export { useUserStore } from './modules/user.uts'

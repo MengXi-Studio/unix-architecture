@@ -1,0 +1,23 @@
+/**
+ * StorageError 构造（内部工具）
+ */
+import type { StorageError, StorageErrorCode } from '../../interface.uts'
+import { BUILTIN_ERR_SUBJECT } from '../constants/defaults'
+
+/**
+ * 构造统一错误结构
+ * @param code 库内错误码
+ * @param errMsg 错误描述
+ * @param nativeErrCode 原生 fail errCode 原值（库内错误传 null）
+ * @param key 关联的业务原始 key（未含前缀；与 key 无关的错误传 null）
+ */
+export function buildStorageError(code: StorageErrorCode, errMsg: string, nativeErrCode: number | null, key: string | null): StorageError {
+	const err: StorageError = {
+		code: code,
+		errSubject: BUILTIN_ERR_SUBJECT,
+		errMsg: errMsg,
+		nativeErrCode: nativeErrCode,
+		key: key
+	}
+	return err
+}

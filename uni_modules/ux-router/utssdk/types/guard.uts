@@ -1,0 +1,15 @@
+/**
+ * 导航守卫类型定义
+ *
+ * 核心守卫定义已迁移到 route.uts 避免循环依赖
+ */
+export type {
+	NavigationGuard,
+	PostNavigationGuard,
+	NavigationGuardReturn,
+	BeforeRouteEnterGuard,
+	BeforeRouteUpdateGuard,
+	BeforeRouteLeaveGuard,
+	NavigationRedirect,
+	NavigationRedirectMode
+} from './route'

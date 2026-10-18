@@ -1,0 +1,33 @@
+/**
+ * useRouter 组合式 API
+ *
+ * 获取路由器实例。优先在 setup 上下文中通过 provide/inject 获取（多实例场景），
+ * 非 setup（选项式 methods / 事件回调）回退到全局活跃路由器。
+ *
+ * 注意：`inject()` 仅在 setup 内可用；在事件回调/选项式方法中直接调用会触发
+ * Vue 警告并可能返回 undefined，故此处先判断是否处于 setup 上下文。
+ */
+import { getCurrentInstance, inject } from 'vue'
+import type { Router } from '../types'
+import { ROUTER_SYMBOL } from '../constants'
+import { activeGlobalRouter } from '../store'
+
+/**
+ * 获取路由器实例
+ * @throws 当既未注入也未被全局安装时抛出
+ */
+export function useRouter(): Router {
+	const instance = getCurrentInstance()
+	if (instance !== null) {
+		// 处于 setup 上下文：优先读取注入的路由器（多实例场景）
+		const injected = inject<Router | null>(ROUTER_SYMBOL, null)
+		if (injected !== null) {
+			return injected
+		}
+	}
+	const global = activeGlobalRouter()
+	if (global !== null) {
+		return global
+	}
+	throw new Error('未找到路由器实例，请先 app.use(router) 后再调用 useRouter()')
+}

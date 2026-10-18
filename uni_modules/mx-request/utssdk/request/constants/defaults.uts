@@ -1,0 +1,24 @@
+/**
+ * 库内置默认值常量（仅供内部归一化回退使用）
+ *
+ * 命名红线：插件内所有 .uts 同 Kotlin package，与入口 index.uts 对外
+ * 常量（DEFAULT_* / REQUEST_*）同名会触发导出符号静默重整（__1），故
+ * 内部常量一律 BUILTIN_ 前缀，值须与入口内联字面量保持一致。
+ */
+
+/** 内置默认超时（毫秒） */
+export const BUILTIN_TIMEOUT: number = 60000
+
+/** 内置默认请求方法 */
+export const BUILTIN_METHOD: string = 'GET'
+
+/** 内置默认状态码校验（2xx 视为成功，axios validateStatus 默认语义） */
+export const BUILTIN_VALIDATE_STATUS: ((statusCode: number) => boolean) = (statusCode: number): boolean => {
+	return statusCode >= 200 && statusCode < 300
+}
+
+/** 内置默认 Content-Type（data 为 UTSJSONObject 且业务未显式设置时补设） */
+export const BUILTIN_CONTENT_TYPE: string = 'application/json'
+
+/** 统一错误 errSubject（RequestError.errSubject 固定值；与入口 REQUEST_ERR_SUBJECT 同值） */
+export const BUILTIN_ERR_SUBJECT: string = 'unix-request'

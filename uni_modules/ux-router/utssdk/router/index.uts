@@ -1,0 +1,515 @@
+/**
+ * 路由器主类与 createRouter
+ *
+ * 提供 vue-router 风格的导航、守卫注册、状态查询与插件扩展能力，适配 uni-app x 静态页面模型。
+ * 底层基于 uni.* 原生导航 API 与原生页面栈（getCurrentPages）实现；
+ * 扩展能力通过插件（plugins）提供，对齐 uni-router 的核心 + 插件架构。
+ */
+import type { App } from 'vue'
+import type {
+	GuardRouteOptions,
+	NavigationResult,
+	PostNavigationGuard,
+	RouteConfig,
+	RouteLocation,
+	RouteLocationRaw,
+	NavigationGuard,
+	Router,
+	RouterOnError,
+	RouterOptions,
+	PluginData,
+	NavigationPrepareContext,
+	NavigationCompleteContext
+} from '../types'
+import { RouterErrorCode } from '../enums'
+import { ROUTER_SYMBOL, DEFAULT_GUARD_TIMEOUT, DEFAULT_READY_TIMEOUT, DEFAULT_NAV_VERIFY_TIMEOUT, MAX_REDIRECT_DEPTH, PARAMS_QUERY_KEY, EVT_QUERY_KEY } from '../constants'
+import { NavigationFailure } from '../errors/navigation-failure'
+import { RouterError } from '../errors/router-error'
+import { createGuardManager, type GuardManager, type GuardResult } from '../guard'
+import { navigateTo, replaceTo, relaunchTo, goBack } from '../navigation'
+import type { UniNavigationOptions } from '../navigation/type'
+import { getCurrentPagesSafe, getPageStackLength, waitForTopPage } from '../navigation/context'
+import { createRouteState, type RouteState } from '../state'
+import { createRouteMatcher, type RouteMatcher } from '../matcher'
+import { PluginHookManager } from './plugin-hooks'
+import { UniHistory } from '../history'
+import { normalizePath, warn, buildFullPath } from '../utils'
+import { setActiveGlobalRouter, setGlobalCurrentRoute } from '../store'
+import { markRouterCall } from '../plugins/interceptor'
+import { createParamsManager } from '../plugins/params'
+import { isSameRouteLocation } from './location'
+import type { NavigationMode } from './type'
+
+/**
+ * uni-app x 路由器实现类
+ */
+class UniRouter implements Router {
+	private routeState: RouteState
+	private guardManager: GuardManager
+	private matcher: RouteMatcher
+	private history: UniHistory
+	private pluginHooks: PluginHookManager
+	private pendingNavigation: Promise<NavigationResult> | null = null
+	private errorHandlers: RouterOnError[] = []
+	private guardTimeout: number
+	private readyTimeout: number
+	private strict: boolean
+
+	constructor(options: RouterOptions) {
+		this.strict = options.strict ?? true
+		this.guardTimeout = options.guardTimeout ?? DEFAULT_GUARD_TIMEOUT
+		this.readyTimeout = options.readyTimeout ?? DEFAULT_READY_TIMEOUT
+		this.guardManager = createGuardManager()
+		this.matcher = createRouteMatcher(options.routes, this.strict)
+		this.routeState = createRouteState(this.readyTimeout)
+		this.history = new UniHistory(this.matcher)
+		this.pluginHooks = new PluginHookManager(this, createParamsManager(options.paramsPersistent === true))
+		this.pendingNavigation = null
+		this.errorHandlers = []
+		// 安装插件（在 matcher / routeState / history 就绪后，导航发生前注册 hook）
+		this.initPlugins(options)
+		this.initRoute()
+	}
+
+	/** 当前路由位置 */
+	get currentRoute(): RouteLocation {
+		return this.routeState.currentRoute.value
+	}
+
+	/** 导航到新页面（uni.navigateTo / uni.switchTab） */
+	push(location: RouteLocationRaw): Promise<NavigationResult> {
+		return this.performNavigation(location, 'push')
+	}
+
+	/** 替换当前页面（uni.redirectTo / uni.switchTab） */
+	replace(location: RouteLocationRaw): Promise<NavigationResult> {
+		return this.performNavigation(location, 'replace')
+	}
+
+	/** 关闭所有页面并打开目标页面（uni.reLaunch / uni.switchTab） */
+	relaunch(location: RouteLocationRaw): Promise<NavigationResult> {
+		return this.performNavigation(location, 'relaunch')
+	}
+
+	/** 返回上一页或多级页面（uni.navigateBack） */
+	async back(delta: number | null): Promise<NavigationResult> {
+		if (this.pendingNavigation != null) {
+			await this.pendingNavigation.catch(() => {})
+		}
+		const from = this.routeState.currentRoute.value
+		const d = delta === null ? 1 : delta
+		if (d <= 0 || !Number.isInteger(d)) {
+			return this.failNavigation(from, from, new NavigationFailure(RouterErrorCode.ABORTED, 'back() 的 delta 必须为正整数', from, from))
+		}
+		const pages = getCurrentPagesSafe()
+		if (pages.length < 2 || d >= pages.length) {
+			return this.failNavigation(from, from, new NavigationFailure(RouterErrorCode.CANCELLED, '无法返回：页面栈中没有足够的上一页', from, from))
+		}
+		const targetPage = pages[pages.length - 1 - d]
+		const targetPath = '/' + targetPage.route
+		const to = this.matcher.resolve(targetPath)
+
+		const before = await this.guardManager.runBeforeEach(to, from, this.guardTimeout)
+		const handled = await this.handleGuardResult(before, to, from, 'push')
+		if (handled != null) return handled
+
+		const resolveResult = await this.guardManager.runBeforeResolve(to, from, this.guardTimeout)
+		const handledResolve = await this.handleGuardResult(resolveResult, to, from, 'push')
+		if (handledResolve != null) return handledResolve
+
+		// back 模式不经过 enrich/afterResolve，pluginData 为空
+		const pluginData: PluginData = new Map<string, any>()
+		const navOptions = this.buildNavOptions(to)
+		const prepareCtx: NavigationPrepareContext = {
+			to,
+			from,
+			mode: 'back',
+			pluginData,
+			query: navOptions.query,
+			options: navOptions
+		}
+		this.pluginHooks.prepareNavigation(prepareCtx)
+		// beforeNavigation hooks（可异步：back 退出动画播完后再真正返回）
+		await this.pluginHooks.beforeNavigation(prepareCtx)
+
+		try {
+			markRouterCall()
+			await goBack(d, { type: navOptions.animationType, duration: navOptions.animationDuration })
+			this.routeState.setCurrentRoute(to)
+			this.guardManager.runAfter(to, from, null)
+			return to
+		} catch (e) {
+			this.pluginHooks.runAbortHooks(pluginData)
+			const failure = new NavigationFailure(RouterErrorCode.NAVIGATION_API_ERROR, `返回失败: ${e}`, to, from)
+			return this.failNavigation(to, from, failure)
+		}
+	}
+
+	beforeEach(guard: NavigationGuard): () => void {
+		return this.guardManager.beforeEach(guard)
+	}
+
+	beforeResolve(guard: NavigationGuard): () => void {
+		return this.guardManager.beforeResolve(guard)
+	}
+
+	afterEach(guard: PostNavigationGuard): () => void {
+		return this.guardManager.afterEach(guard)
+	}
+
+	getRoutes(): RouteConfig[] {
+		return this.matcher.getRoutes()
+	}
+
+	hasRoute(name: string): boolean {
+		return this.matcher.hasRoute(name)
+	}
+
+	resolve(location: RouteLocationRaw): RouteLocation {
+		return this.matcher.resolve(location)
+	}
+
+	isReady(): Promise<void> {
+		return this.routeState.onReady()
+	}
+
+	onError(handler: RouterOnError): () => void {
+		this.errorHandlers.push(handler)
+		return () => {
+			const index = this.errorHandlers.indexOf(handler)
+			if (index > -1) {
+				this.errorHandlers.splice(index, 1)
+			}
+		}
+	}
+
+	onRouteChange(listener: (to: RouteLocation, from: RouteLocation) => void): () => void {
+		return this.routeState.onRouteChange(listener)
+	}
+
+	/** 从页面栈同步路由状态到 currentRoute */
+	syncRoute(): void {
+		try {
+			const current = this.history.resolveCurrent()
+			// routeSync hooks：从 URL query 提取插件数据（如 params 由 key 重建）并移除内部 key
+			const query = new Map<string, string>(current.query)
+			const params = new Map<string, string>(current.params)
+			this.pluginHooks.runRouteSyncHooks(query, params)
+			// 重建（query 可能已移除内部 key，需重算 fullPath）
+			const next: RouteLocation = {
+				path: current.path,
+				name: current.name,
+				meta: current.meta,
+				query,
+				params,
+				fullPath: buildFullPath(current.path, query),
+				hash: current.hash,
+				matched: current.matched
+			}
+			this.routeState.setCurrentRoute(next)
+		} catch (e) {
+			warn(`路由状态同步失败: ${e}`)
+		}
+	}
+
+	/** 对指定路由补执行守卫链（冷启动），不执行实际导航 */
+	async guardRoute(location?: RouteLocationRaw, options?: GuardRouteOptions): Promise<RouteLocation> {
+		const target = location != null ? this.matcher.resolve(location) : this.routeState.currentRoute.value
+		const from = this.routeState.currentRoute.value
+		const before = await this.guardManager.runBeforeEach(target, from, this.guardTimeout)
+		if (before.kind === 'abort') {
+			const failure = new NavigationFailure(before.code ?? RouterErrorCode.CANCELLED, '守卫中止了冷启动导航', target, from)
+			this.triggerErrorHandlers(failure, target, from)
+			if (options != null && options.onAbort != null) {
+				options.onAbort(failure)
+			}
+			// UTS 中 Promise.reject 固定返回 Promise<void>，此处按目标类型构造已拒绝的 Promise
+			return new Promise<RouteLocation>((resolve, reject) => {
+				reject(failure)
+			})
+		}
+		if (before.kind === 'redirect' && before.redirect != null) {
+			const redirectMode = before.mode ?? 'relaunch'
+			return this.performNavigation(before.redirect, redirectMode === 'replace' ? 'replace' : redirectMode === 'push' ? 'push' : 'relaunch')
+		}
+		return target
+	}
+
+	/** 安装路由器到 Vue 应用 */
+	install(app: any): void {
+		// #ifdef WEB
+		app.provide(ROUTER_SYMBOL, this)
+		if (!('$router' in app.config.globalProperties)) {
+			app.config.globalProperties.$router = this
+		}
+		if (!('$route' in app.config.globalProperties)) {
+			Object.defineProperty(app.config.globalProperties, '$route', {
+				enumerable: true,
+				configurable: true,
+				get: () => this.routeState.currentRoute.value
+			})
+		}
+		const router = this
+		app.mixin({
+			onShow() {
+				router.syncRoute()
+			}
+		})
+		// #endif
+		// 注册全局活跃路由器，供 useRouter() 在非 setup 上下文（选项式 methods / 事件回调）回退使用
+		setActiveGlobalRouter(this)
+		// 触发 app 级插件 hook（如拦截器的卸载清理）
+		this.pluginHooks.runAppInstallHooks(app)
+		this.routeState.markReady()
+	}
+
+	/** 安装插件列表 */
+	private initPlugins(options: RouterOptions): void {
+		this.pluginHooks.install(options.plugins ?? [], options)
+	}
+
+	/** 冷启动时按页面栈初始化当前路由状态 */
+	private initRoute(): void {
+		if (getPageStackLength() === 0) {
+			// 页面栈为空：以 '/' 占位
+			return
+		}
+		this.syncRoute()
+	}
+
+	/** 移除当前路由位置中的插件内部 key（如 __params__ / __evt__），避免暴露给用户 */
+	private stripInternalKeys(to: RouteLocation): RouteLocation {
+		const query = new Map<string, string>(to.query)
+		let stripped = false
+		if (query.has(PARAMS_QUERY_KEY)) {
+			query.delete(PARAMS_QUERY_KEY)
+			stripped = true
+		}
+		if (query.has(EVT_QUERY_KEY)) {
+			query.delete(EVT_QUERY_KEY)
+			stripped = true
+		}
+		if (!stripped) {
+			return to
+		}
+		return {
+			...to,
+			query,
+			fullPath: buildFullPath(to.path, query)
+		}
+	}
+
+	/** 构造 uni 导航选项（query 由插件在 enrich/prepare 阶段写入内部 key） */
+	private buildNavOptions(to: RouteLocation): UniNavigationOptions {
+		const query = new Map<string, string>(to.query)
+		return {
+			path: to.path,
+			query,
+			isTab: to.meta.isTab === true,
+			meta: to.meta
+		}
+	}
+
+	/** 执行导航（带并发排队与重复导航检测） */
+	private async performNavigation(location: RouteLocationRaw, mode: NavigationMode): Promise<NavigationResult> {
+		if (this.pendingNavigation != null) {
+			await this.pendingNavigation.catch(() => {})
+		}
+		// 使用 params 但未注册 ParamsPlugin → PLUGIN_REQUIRED
+		if (!this.pluginHooks.hasPlugin('params') && location != null && typeof location !== 'string' && location.params != null && location.params.size > 0) {
+			const from = this.routeState.currentRoute.value
+			const failure = new NavigationFailure(RouterErrorCode.PLUGIN_REQUIRED, `使用 params 需注册 ParamsPlugin：createRouter({ plugins: [ParamsPlugin] })`, from, from)
+			return this.failNavigation(from, from, failure)
+		}
+		// 使用 events 但未注册 EventsPlugin → PLUGIN_REQUIRED
+		if (!this.pluginHooks.hasPlugin('events') && location != null && typeof location !== 'string' && location.events != null && location.events.size > 0) {
+			const from = this.routeState.currentRoute.value
+			const failure = new NavigationFailure(RouterErrorCode.PLUGIN_REQUIRED, `使用 events 需注册 EventsPlugin：createRouter({ plugins: [EventsPlugin] })`, from, from)
+			return this.failNavigation(from, from, failure)
+		}
+		// 1. enrichLocation hooks（插件注入内部 key 到 query）
+		const enriched = this.pluginHooks.enrichLocation(location)
+		const pluginData: PluginData = new Map<string, any>()
+		let to: RouteLocation
+		try {
+			// 2. 解析增强后的路由位置
+			to = this.matcher.resolve(enriched)
+		} catch (e) {
+			const from = this.routeState.currentRoute.value
+			if (e instanceof RouterError) {
+				return this.failNavigation(from, from, e)
+			}
+			const failure = new NavigationFailure(RouterErrorCode.ROUTE_NOT_FOUND, `路由解析失败: ${e}`, from, from)
+			return this.failNavigation(from, from, failure)
+		}
+		// 3. afterResolve hooks（从增强位置提取插件数据）
+		this.pluginHooks.afterResolve(enriched, pluginData)
+		const from = this.routeState.currentRoute.value
+		// 重复导航检测（push 到同一地址）
+		if (mode === 'push' && isSameRouteLocation(to, from)) {
+			this.pluginHooks.runAbortHooks(pluginData)
+			const failure = new NavigationFailure(RouterErrorCode.DUPLICATED, `避免重复导航到当前地址: "${to.fullPath}"`, to, from)
+			return this.failNavigation(to, from, failure)
+		}
+
+		const promise = this.executeNavigation(to, from, mode, 0, pluginData)
+		this.pendingNavigation = promise
+		try {
+			return await promise
+		} finally {
+			if (this.pendingNavigation === promise) {
+				this.pendingNavigation = null
+			}
+		}
+	}
+
+	/** 执行完整导航流程：beforeEach → beforeEnter → beforeResolve → (prepare) → uni API → (complete) → afterEach */
+	private async executeNavigation(to: RouteLocation, from: RouteLocation, mode: NavigationMode, redirectDepth: number, pluginData: PluginData): Promise<NavigationResult> {
+		if (redirectDepth > MAX_REDIRECT_DEPTH) {
+			const failure = new NavigationFailure(RouterErrorCode.CANCELLED, `重定向深度超过上限(${MAX_REDIRECT_DEPTH})`, to, from)
+			return this.failNavigation(to, from, failure)
+		}
+
+		const config = this.matcher.getRouteConfig(to.path)
+
+		const before = await this.guardManager.runBeforeEach(to, from, this.guardTimeout)
+		const handled = await this.handleGuardResult(before, to, from, mode, redirectDepth, pluginData)
+		if (handled != null) return handled
+
+		if (config != null) {
+			const beforeEnter = await this.guardManager.runBeforeEnter(config, to, from, this.guardTimeout)
+			const handledEnter = await this.handleGuardResult(beforeEnter, to, from, mode, redirectDepth, pluginData)
+			if (handledEnter != null) return handledEnter
+		}
+
+		const beforeResolve = await this.guardManager.runBeforeResolve(to, from, this.guardTimeout)
+		const handledResolve = await this.handleGuardResult(beforeResolve, to, from, mode, redirectDepth, pluginData)
+		if (handledResolve != null) return handledResolve
+
+		const navOptions = this.buildNavOptions(to)
+		// prepareNavigation hooks（插件修改导航 query 与选项）
+		const prepareCtx: NavigationPrepareContext = {
+			to,
+			from,
+			mode,
+			pluginData,
+			query: navOptions.query,
+			options: navOptions
+		}
+		this.pluginHooks.prepareNavigation(prepareCtx)
+		// beforeNavigation hooks（可异步：H5 端插件在此等待退出动画播完）
+		await this.pluginHooks.beforeNavigation(prepareCtx)
+
+		try {
+			markRouterCall()
+			if (mode === 'push') {
+				await navigateTo(navOptions)
+			} else if (mode === 'replace') {
+				await replaceTo(navOptions)
+			} else {
+				await relaunchTo(navOptions)
+			}
+			// uni api 受理不代表目标页已入栈，确认目标页真实成为栈顶后才视为成功
+			const confirmed = await this.confirmNavigation(to)
+			if (!confirmed) {
+				this.pluginHooks.runAbortHooks(pluginData)
+				const failure = new NavigationFailure(RouterErrorCode.NAVIGATION_API_ERROR, `导航后未能在页面栈顶确认目标页: "${to.path}"`, to, from)
+				return this.failNavigation(to, from, failure)
+			}
+			// 导航成功：更新状态并触发插件完成 hook 与后置守卫（写入前清洗内部 key）
+			const clean = this.stripInternalKeys(to)
+			this.routeState.setCurrentRoute(clean)
+			setGlobalCurrentRoute(clean)
+			let result: RouteLocation = clean
+			const completeCtx: NavigationCompleteContext = {
+				to: clean,
+				mode,
+				pluginData,
+				result
+			}
+			this.pluginHooks.completeNavigation(completeCtx)
+			result = completeCtx.result
+			this.guardManager.runAfter(to, from, null)
+			return result
+		} catch (e) {
+			this.pluginHooks.runAbortHooks(pluginData)
+			const failure = new NavigationFailure(RouterErrorCode.NAVIGATION_API_ERROR, `uni 导航失败: ${e}`, to, from)
+			return this.failNavigation(to, from, failure)
+		}
+	}
+
+	/**
+	 * 轮询确认导航目标已进入页面栈顶
+	 * 以页面栈（getCurrentPages）为唯一真实来源，避免 `uni` 导航单一 success 回调带来的状态漂移
+	 */
+	private confirmNavigation(to: RouteLocation): Promise<boolean> {
+		return waitForTopPage(normalizePath(to.path), DEFAULT_NAV_VERIFY_TIMEOUT)
+	}
+
+	/**
+	 * 处理守卫结果：abort → 失败（并触发 abort hooks）；redirect → 递归导航（重建 enrich/afterResolve）；next → 返回 null 继续
+	 */
+	private async handleGuardResult(result: GuardResult, to: RouteLocation, from: RouteLocation, mode: NavigationMode, redirectDepth: number = 0, pluginData: PluginData = new Map<string, any>()): Promise<NavigationResult | null> {
+		if (result.kind === 'abort') {
+			this.pluginHooks.runAbortHooks(pluginData)
+			const message = result.code === RouterErrorCode.CANCELLED && result.error != null ? `导航取消: ${result.error.message}` : '导航被中止'
+			const failure = new NavigationFailure(result.code ?? RouterErrorCode.CANCELLED, message, to, from)
+			return this.failNavigation(to, from, failure)
+		}
+		if (result.kind === 'redirect' && result.redirect != null) {
+			const redirectMode: NavigationMode = result.mode === 'replace' ? 'replace' : result.mode === 'push' ? 'push' : mode
+			// 重定向时对新的 location 重新执行 enrich + afterResolve
+			const enrichedRedirect = this.pluginHooks.enrichLocation(result.redirect)
+			const redirectTarget = this.matcher.resolve(enrichedRedirect)
+			this.pluginHooks.afterResolve(enrichedRedirect, pluginData)
+			return this.executeNavigation(redirectTarget, from, redirectMode, redirectDepth + 1, pluginData)
+		}
+		return null
+	}
+
+	/** 触发所有错误处理器 */
+	private triggerErrorHandlers(error: Error, to: RouteLocation, from: RouteLocation): void {
+		for (var i = 0; i < this.errorHandlers.length; i++) {
+			try {
+				this.errorHandlers[i](error, to, from)
+			} catch (e) {
+				void e
+			}
+		}
+	}
+
+	/** 统一导航失败处理：触发 afterEach + 错误处理器，返回 reject */
+	private failNavigation(to: RouteLocation, from: RouteLocation, failure: Error): Promise<never> {
+		this.guardManager.runAfter(to, from, failure)
+		this.triggerErrorHandlers(failure, to, from)
+		// UTS 中 Promise.reject 固定返回 Promise<void>，此处按目标类型构造已拒绝的 Promise
+		return new Promise<never>((resolve, reject) => {
+			reject(failure)
+		})
+	}
+}
+
+/**
+ * 创建 uni-app x 路由器实例
+ * @param options - 路由器初始化选项
+ * @returns 路由器实例
+ *
+ * @example
+ * ```uts
+ * import { createRouter, InterceptorPlugin } from '@meng-xi/unix-router'
+ *
+ * const router = createRouter({
+ *   routes: [
+ *     { path: 'pages/index/index', name: 'home', meta: { title: '首页', isTab: true } },
+ *     { path: 'pages/about/about', name: 'about', meta: { requireAuth: true } }
+ *   ],
+ *   plugins: [InterceptorPlugin],  // 可选：拦截 uni 原生导航 API
+ *   interceptUniApi: true          // 与 InterceptorPlugin 配合
+ * })
+ * app.use(router)
+ * await router.push('/pages/about/about')
+ * ```
+ */
+export function createRouter(options: RouterOptions): Router {
+	return new UniRouter(options)
+}

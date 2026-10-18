@@ -1,0 +1,52 @@
+/**
+ * 平台判断工具
+ *
+ * uni-app x 逻辑层通过 uni.getSystemInfoSync() / uni.getAppBaseInfo() 获取平台。
+ * 与 uni-app 标准版共用 uni 全局，但可通过 uniPlatform 与特定标志区分。
+ */
+
+export class PlatformInfo {
+	/** 是否为 App 端（Android / iOS，含蒸汽模式与 VDOM） */
+	isApp: boolean = false
+	/** 是否为 H5 / Web 端 */
+	isH5: boolean = false
+	/** 是否为微信小程序端 */
+	isMpWeixin: boolean = false
+	/** 是否为 uni-app x 运行时（区别于 uni-app 标准版） */
+	isAppX: boolean = false
+	/** 原始平台标识 */
+	uniPlatform: string = 'web'
+}
+
+/** 全局缓存的平台信息 */
+let cached: PlatformInfo | null = null
+
+/**
+ * 获取当前平台信息（带缓存）
+ * 在非 uni 环境（如纯 Node / 单测）下安全回退为 web。
+ */
+export function getPlatform(): PlatformInfo {
+	const current = cached
+	if (current !== null) {
+		return current
+	}
+	const info = new PlatformInfo()
+	try {
+		// uni.getAppBaseInfo() 返回 GetAppBaseInfoResult 对象，uniPlatform 为对象字段（非 Map）
+		const appBase = uni.getAppBaseInfo()
+		const platform: string | null = appBase.uniPlatform === null ? null : appBase.uniPlatform
+		info.uniPlatform = platform !== null && platform.length > 0 ? platform : 'web'
+		info.isApp = platform === 'app'
+		info.isH5 = platform === 'web'
+		info.isMpWeixin = platform === 'mp-weixin'
+		// App 端运行在 uni-app x 编译器下的特征：存在 APP-X 编译常量；
+		// 归并判断：App 端在 uni-app x 中以蒸汽/VDOM 运行，统一视为 isAppX
+		info.isAppX = info.isApp || platform === 'app'
+	} catch (e) {
+		// 非 uni 环境，回退为 web
+		info.uniPlatform = 'web'
+		info.isH5 = true
+	}
+	cached = info
+	return info
+}

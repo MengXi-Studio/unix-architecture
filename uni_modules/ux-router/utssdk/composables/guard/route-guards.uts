@@ -1,0 +1,58 @@
+/**
+ * 组件内导航守卫（组合式 API）
+ *
+ * uni-app x 中页面每次导航都会创建新实例（无 keep-alive 复用），因此：
+ * - onBeforeRouteLeave：在本页面注册，离开该页面时触发（最常用）
+ * - onBeforeRouteEnter：当再次导航进入该路径时触发（首次进入已在创建途中，效果有限）
+ * - onBeforeRouteUpdate：路径未变参数变化的场景在静态页模型中极少触发
+ *
+ * 实现方式：注册一个过滤后的全局解析守卫，故可与 router.beforeResolve 协同。
+ */
+import type { BeforeRouteEnterGuard, BeforeRouteLeaveGuard, BeforeRouteUpdateGuard } from '../../types'
+import { useRouter } from '../router'
+
+/**
+ * 注册组件内离开守卫
+ * @param guard - 离开守卫（返回 false 可阻止离开）
+ */
+export function onBeforeRouteLeave(guard: BeforeRouteLeaveGuard): void {
+	const router = useRouter()
+	const currentPath = router.currentRoute.path
+	router.beforeResolve((to, from) => {
+		// 仅在离开当前页面时应用
+		if (from.path !== currentPath) {
+			return true
+		}
+		return guard(to, from)
+	})
+}
+
+/**
+ * 注册组件内进入守卫
+ * @param guard - 进入守卫
+ */
+export function onBeforeRouteEnter(guard: BeforeRouteEnterGuard): void {
+	const router = useRouter()
+	const path = router.currentRoute.path
+	router.beforeResolve((to, from) => {
+		if (to.path !== path) {
+			return true
+		}
+		return guard(to, from)
+	})
+}
+
+/**
+ * 注册组件内更新守卫
+ * @param guard - 更新守卫
+ */
+export function onBeforeRouteUpdate(guard: BeforeRouteUpdateGuard): void {
+	const router = useRouter()
+	const path = router.currentRoute.path
+	router.beforeResolve((to, from) => {
+		if (to.path !== path || from.path !== path) {
+			return true
+		}
+		return guard(to, from)
+	})
+}

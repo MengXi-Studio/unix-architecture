@@ -1,0 +1,102 @@
+/**
+ * unix-storage 插件跨平台根入口（uni_modules UTS 插件）
+ *
+ * 官方架构：本文件即无平台目录端（全端）的实现入口——纯编排层，
+ * uni.setStorage 系列全端统一，无需平台目录。所有对外 API 以内联形态
+ * 声明：Promise 族用 `export function apiName` 具名声明（含泛型 get<T>），
+ * 同步返回族用官方 `export const apiName: ApiType = function (...)`。
+ *
+ * 红线（继承 unix-request 实战）：
+ * 1. 插件内所有 .uts 同 Kotlin package，实现函数一律 Impl 后缀、内部
+ *    同语义常量 BUILTIN_/STORAGE_ 前缀，避免同名 top-level 符号触发导出
+ *    符号静默重整（__1）；
+ * 2. 不得用 export { x } from 转发链对外暴露 API——uts-proxy V1 只
+ *    解析本入口的内联声明。
+ */
+import { setImpl, getImpl, removeImpl, clearImpl, infoImpl, keysImpl, clearExpiredImpl } from './storage/core'
+import { defaultCore, setCoreDefaults, createStorageImpl } from './storage/instance'
+// StorageInstance 必须在本入口显式 import：createStorage 实现的返回类型标注引用它，
+// Kotlin 生成器只为入口可见类型生成定义，缺失即 compileReleaseKotlin 报
+// Unresolved reference 'StorageInstance'（云打包实证，web 端仅 TS warning 不易察觉）
+import type { StorageDefaults, StorageInfo, StorageInstance, ConfigureStorage, CreateStorage } from './interface.uts'
+
+/**
+ * 对外类型转发（同目录 interface.uts，非跨级 re-export）：
+ * 消费方 import type { StorageDefaults } from '@/uni_modules/ux-storage'
+ * 须经本入口解析（uts-proxy V1 的类型转发只影响消费方 TS 视图，
+ * API 编码生成仍只看下方内联 export 声明）
+ */
+export type {
+	StorageErrorCode,
+	StorageError,
+	StorageDefaults,
+	StorageInfo,
+	StorageInstance,
+	ConfigureStorage,
+	CreateStorage
+} from './interface.uts'
+
+/* ============ 入口常量（对外契约；内部同语义常量见 storage/constants，BUILTIN_ 前缀） ============ */
+
+/** 默认 key 前缀（规避 uni- / dcloud_ 平台保留前缀） */
+export const DEFAULT_KEY_PREFIX: string = 'mx_storage:'
+
+/** 统一错误 errSubject（StorageError.errSubject 固定值） */
+export const STORAGE_ERR_SUBJECT: string = 'unix-storage'
+
+/* ============ 默认实例 API（export function 具名声明） ============ */
+
+/**
+ * 写入缓存（默认实例）
+ * @param key 业务 key（实际存储 key = 前缀 + key）
+ * @param data 业务数据（任意可序列化值，null 合法但读取与未命中同样返回 null）
+ * @param ttl 过期毫秒；null 沿用实例默认 defaultTTL（内置永不过期）
+ */
+export function set(key: string, data: any | null, ttl: number | null): Promise<void> {
+	return setImpl(defaultCore, key, data, ttl)
+}
+
+/**
+ * 读取缓存（默认实例；泛型仅静态标注，data 以 any 流转 + as 断言）
+ * @returns 未命中 / 已过期返回 null，不 reject
+ */
+export function get<T>(key: string): Promise<T | null> {
+	return getImpl<T>(defaultCore, key)
+}
+
+/** 移除指定缓存（默认实例） */
+export function remove(key: string): Promise<void> {
+	return removeImpl(defaultCore, key)
+}
+
+/** 清理本命名空间全部缓存（按前缀过滤后逐个移除，不触碰其他数据） */
+export function clear(): Promise<void> {
+	return clearImpl(defaultCore)
+}
+
+/** 存储信息（uni.getStorageInfo 原样结构；命名空间视角用 keys()） */
+export function info(): Promise<StorageInfo> {
+	return infoImpl(defaultCore)
+}
+
+/** 本命名空间 key 列表（剥前缀后返回原始 key） */
+export function keys(): Promise<Array<string>> {
+	return keysImpl(defaultCore)
+}
+
+/** 扫描清理本命名空间已过期记录，返回清理条数 */
+export function clearExpired(): Promise<number> {
+	return clearExpiredImpl(defaultCore)
+}
+
+/* ============ 配置与多实例（非泛型，官方 const 模式） ============ */
+
+/** 覆盖默认实例全局默认配置（字段为 null 表示沿用内置默认） */
+export const configureStorage: ConfigureStorage = function (defaults: StorageDefaults): void {
+	setCoreDefaults(defaultCore, defaults)
+}
+
+/** 创建缓存实例（对标 axios.create；defaults 为 null 时全用内置默认） */
+export const createStorage: CreateStorage = function (defaults: StorageDefaults | null): StorageInstance {
+	return createStorageImpl(defaults)
+}

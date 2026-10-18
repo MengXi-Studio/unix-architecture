@@ -1,0 +1,74 @@
+/**
+ * @meng-xi/unix-router 公共入口
+ *
+ * 为 uni-app x 提供 vue-router 风格的路由能力（UTS 源分发）。
+ * 卖方按平台编译：web/小程序 → JS，Android → Kotlin，iOS → Swift。
+ */
+export { createRouter } from './router'
+export { useRouter, useRoute, useLink, useOpenerEventChannel, onBeforeRouteLeave, onBeforeRouteEnter, onBeforeRouteUpdate } from './composables'
+
+/* 查询参数便捷解析工具（从 route.query Map 原子读值） */
+export { queryInt, queryNumber, queryBool } from './utils'
+
+/* 可选插件：拦截 uni 原生导航 API（opt-in，createRouter 中 plugins: [InterceptorPlugin] + interceptUniApi: true） */
+export { InterceptorPlugin, installInterceptors, removeInterceptors } from './plugins/interceptor'
+
+/* 可选插件：页面参数传递（opt-in，plugins: [ParamsPlugin]；未注册时使用 params 将抛 PLUGIN_REQUIRED） */
+export { ParamsPlugin, createParamsManager } from './plugins/params'
+
+/* 可选插件：导航窗口动画（opt-in，plugins: [AnimationPlugin]；App 透传原生动画，H5 用 WAAPI 实现） */
+export { AnimationPlugin } from './plugins/animation'
+
+/* 可选插件：页面间定向通信（opt-in，plugins: [EventsPlugin]；被打开页用 useOpenerEventChannel 回传数据） */
+export { EventsPlugin, eventBus } from './plugins/events'
+export type { EventChannel, EventsMap, UniEventBus } from './plugins/events'
+
+/* 声明式导航组件：基于 useLink 的可交互导航入口 */
+export { default as RouterLink } from './components/RouterLink.uvue'
+
+import { RouterError } from './errors/router-error'
+import { NavigationFailure } from './errors/navigation-failure'
+import { isNavigationFailure } from './errors/is-navigation-failure'
+
+export { RouterError, NavigationFailure, isNavigationFailure }
+export type { UniNavigationApiError } from './errors/router-error'
+
+export { RouterErrorCode } from './enums'
+export { ROUTER_SYMBOL, DEFAULT_GUARD_TIMEOUT, DEFAULT_READY_TIMEOUT, MAX_REDIRECT_DEPTH } from './constants'
+
+/* 核心类型 */
+export type {
+	Router,
+	RouterOptions,
+	RouterOnError,
+	GuardRouteOptions,
+	RouteConfig,
+	RouteLocation,
+	RouteLocationRaw,
+	RouteLocationNamedRaw,
+	RouteLocationPathRaw,
+	RawLocation,
+	RouteMeta,
+	RouteName,
+	RoutePath,
+	RouteNameMap,
+	QueryValue,
+	ParamObject,
+	NavigationResult,
+	NavigationRedirect,
+	NavigationRedirectMode,
+	NavigationGuard,
+	NavigationGuardReturn,
+	PostNavigationGuard,
+	BeforeRouteEnterGuard,
+	BeforeRouteUpdateGuard,
+	BeforeRouteLeaveGuard,
+	UseLinkOptions,
+	UseLinkReturn,
+	RouterPlugin,
+	PluginContext,
+	PluginData,
+	PluginNavigationMode,
+	NavigationPrepareContext,
+	NavigationCompleteContext
+} from './types'

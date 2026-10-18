@@ -1,0 +1,9 @@
+/**
+ * 类型汇总导出
+ */
+export * from './route'
+export * from './guard'
+export * from './error'
+export * from './router'
+export * from './composables'
+export * from './plugin'

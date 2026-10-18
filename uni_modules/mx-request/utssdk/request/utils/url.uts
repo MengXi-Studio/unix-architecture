@@ -1,0 +1,85 @@
+/**
+ * URL 构建 / query 确定性编码（内部工具）
+ *
+ * uni-app x 官方未明文 GET data → query 的编码规则（设计 1.2 ⑥），
+ * params 编码由库内确定性实现，不依赖原生隐式行为：
+ * - 键值均 encodeURIComponent 转义
+ * - null 值跳过；string 原样；number / boolean 转字符串；
+ *   其余（UTSJSONObject / 数组 / 类型实例）JSON.stringify
+ */
+
+/** 判断是否绝对地址（http / https 开头原样使用，不拼接 baseURL） */
+export function isAbsoluteUrl(url: string): boolean {
+	return url.startsWith('http://') || url.startsWith('https://')
+}
+
+/**
+ * 将 UTSJSONObject 确定性编码为 query string（不含前导 ? / &）
+ * @param params 参数对象（null 值键跳过）
+ * @returns 编码结果；无有效键时返回空字符串
+ */
+export function encodeParams(params: UTSJSONObject): string {
+	const parts: Array<string> = []
+	// 遍历形态（M4 云打包实证）：toMap().forEach((value, key) => 双参回调在
+	// Kotlin 端签名不匹配（Map.forEach 收单参 Map.Entry）——统一用官方静态
+	// UTSJSONObject.keys() 取键数组 + 索引循环（跨端签名一致）
+	const keys = UTSJSONObject.keys(params)
+	for (let i = 0; i < keys.length; i++) {
+		const key = keys[i]
+		const value = params[key]
+		if (value == null) {
+			continue
+		}
+		let raw = ''
+		if (typeof value == 'string') {
+			raw = value as string
+		} else if (typeof value == 'number') {
+			raw = (value as number).toString()
+		} else if (typeof value == 'boolean') {
+			raw = (value as boolean) ? 'true' : 'false'
+		} else {
+			raw = JSON.stringify(value)
+		}
+		parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(raw))
+	}
+	return parts.join('&')
+}
+
+/**
+ * 把 query string 追加到 url（既有 query 用 & 续接；尾部 ? / & 容错）
+ */
+export function appendQuery(url: string, query: string): string {
+	if (query.length == 0) {
+		return url
+	}
+	if (url.endsWith('?') || url.endsWith('&')) {
+		return url + query
+	}
+	if (url.indexOf('?') >= 0) {
+		return url + '&' + query
+	}
+	return url + '?' + query
+}
+
+/**
+ * baseURL 与路径拼接（双侧斜杠容错）
+ * @param base 形如 https://api.example.com 或 https://api.example.com/v1/
+ * @param path 形如 /users 或 users
+ */
+export function joinUrl(base: string, path: string): string {
+	let b = base
+	let p = path
+	while (b.length > 0 && b.endsWith('/')) {
+		b = b.substring(0, b.length - 1)
+	}
+	while (p.length > 0 && p.startsWith('/')) {
+		p = p.substring(1)
+	}
+	if (b.length == 0) {
+		return p
+	}
+	if (p.length == 0) {
+		return b
+	}
+	return b + '/' + p
+}

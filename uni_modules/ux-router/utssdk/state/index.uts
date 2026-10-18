@@ -1,0 +1,15 @@
+/**
+ * 路由状态管理器实现
+ */
+import { RouteState } from './type'
+
+export type { RouteState } from './type'
+
+/**
+ * 创建路由状态管理器
+ * @param readyTimeout - 就绪超时（毫秒，0 表示永不超时）
+ * @returns 路由状态管理器实例
+ */
+export function createRouteState(readyTimeout: number = 0): RouteState {
+	return new RouteState(readyTimeout)
+}

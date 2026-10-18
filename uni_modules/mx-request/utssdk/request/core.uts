@@ -1,0 +1,284 @@
+/**
+ * 请求主流程（设计 3.8 管线）+ sendRequest（唯一 adapter 收敛点）
+ *
+ * 管线：normalize（三级合并 / baseURL 拼接 / params 编码 / fail-fast）
+ *   → 请求拦截器链（按注册顺序变换 config）
+ *   → transformRequest（业务替换版或内置 Content-Type 补设）
+ *   → cancelToken 发送前检查（已取消直接 ERR_CANCELED，不发网络）
+ *   → sendRequest（uni.request 透传 + 任务登记 / 注销）
+ *   → fail 原生 errCode 归类（5→ERR_TIMEOUT / 600003·600010→ERR_NETWORK /
+ *     其余→ERR_NATIVE；token 已取消→ERR_CANCELED）
+ *   → validateStatus（默认 2xx；未通过 4xx→ERR_BAD_REQUEST / 5xx→
+ *     ERR_BAD_RESPONSE，response 挂响应原文）
+ *   → transformResponse（业务替换版或内置透传）
+ *   → 响应拦截器链（成功 / 错误统一走状态机；onRejected 可恢复 / 换错 /
+ *     放行；axios 语义：normalize / 拦截器异常等前段错误同样进入错误链）
+ *   → resolve / reject
+ *
+ * 拦截器内抛出的任何异常视为链路 bug，库内捕获转 ERR_NATIVE（3.4，
+ * 规避 UTS throw 约束破坏链路）。
+ */
+import type { RequestConfig, RequestError, RequestErrorCode, ResponseResult, ResponseAny } from '../interface.uts'
+import type { InstanceCore, ChainOutcome } from './types'
+import { normalizeRequest } from './config/normalize'
+import { buildRequestError, isRequestErrorValue } from './utils/error'
+import { applyTransformRequest, applyTransformResponse } from './transform'
+import { registerCancelTask, unregisterCancelTask } from './cancel'
+
+/**
+ * 请求主流程入口（默认实例与全部实例共用同一管线）
+ * @param core 实例核心（defaults + 拦截器注册表）
+ * @param config 请求配置
+ * @returns Promise<ResponseResult<T>>，失败 reject RequestError
+ */
+export function dispatchImpl<T>(core: InstanceCore, config: RequestConfig): Promise<ResponseResult<T>> {
+	return new Promise<ResponseResult<T>>((resolve, reject) => {
+		// ===== 1. normalize（fail-fast：ERR_PARAM / ERR_CONFIG）=====
+		const norm = normalizeRequest(core.defaults, config)
+		let cfg: RequestConfig | null = norm.config
+		let stageError: RequestError | null = norm.error
+
+		// ===== 2. 请求拦截器链（按注册顺序逐层变换 config）=====
+		if (cfg != null && stageError == null) {
+			const list = core.requestInterceptors
+			for (let i = 0; i < list.length; i++) {
+				const fn = list[i].onFulfilled
+				const current = cfg as RequestConfig
+				try {
+					cfg = fn(current)
+				} catch (e) {
+					cfg = null
+					stageError = buildRequestError('ERR_NATIVE', '请求拦截器执行异常', null, null, current, null)
+					break
+				}
+			}
+		}
+
+		// ===== 3. transformRequest + 取消预检 + 发送 =====
+		if (cfg != null && stageError == null) {
+			const current = cfg as RequestConfig
+			try {
+				applyTransformRequest(current)
+			} catch (e) {
+				stageError = buildRequestError('ERR_NATIVE', 'transformRequest 执行异常', null, null, current, null)
+			}
+			if (stageError == null) {
+				const token = current.cancelToken
+				if (token != null && token.canceled) {
+					stageError = buildRequestError('ERR_CANCELED', buildCancelErrMsg(token.reason), null, null, current, null)
+				}
+			}
+			if (stageError == null) {
+				sendRequest(current, (res: RequestSuccess<any>) => {
+					// ===== 发送成功：validateStatus → transformResponse =====
+					// M4 云打包实证：RequestSuccess<any>.data 在 Kotlin 绑定层为
+					// Any?，而 ResponseResult.data 契约为非空 any——原生空响应体
+					// （如 HEAD / 204）在此归一为空对象，后续 validateStatus /
+					// transformResponse / 响应链均按非空 data 流转
+					const emptyData: UTSJSONObject = {}
+					const rawData: any = res.data ?? emptyData
+					const raw: ResponseAny = {
+						data: rawData,
+						statusCode: res.statusCode,
+						header: res.header,
+						cookies: res.cookies,
+						config: current
+					}
+					let chainOk = true
+					let chainRes: ResponseAny | null = raw
+					let chainErr: RequestError | null = null
+					const validate = current.validateStatus
+					if (validate == null || !validate(res.statusCode)) {
+						chainOk = false
+						chainRes = null
+						const httpCode: RequestErrorCode = res.statusCode < 500 ? 'ERR_BAD_REQUEST' : 'ERR_BAD_RESPONSE'
+						chainErr = buildRequestError(httpCode, 'HTTP 状态码校验失败：' + res.statusCode.toString(), null, res.statusCode, current, raw)
+					} else {
+						try {
+							const data = applyTransformResponse(current, rawData)
+							const transformed: ResponseAny = {
+								data: data,
+								statusCode: res.statusCode,
+								header: res.header,
+								cookies: res.cookies,
+								config: current
+							}
+							chainRes = transformed
+						} catch (e) {
+							chainOk = false
+							chainRes = null
+							chainErr = buildRequestError('ERR_NATIVE', 'transformResponse 执行异常', null, null, current, null)
+						}
+					}
+					const outcome = runResponseChain(core, chainOk, chainRes, chainErr, current)
+					settle(resolve, reject, outcome)
+				}, (err: RequestError) => {
+					// ===== 发送失败：原生 fail 已归类 =====
+					const outcome = runResponseChain(core, false, null, err, current)
+					settle(resolve, reject, outcome)
+				})
+				return
+			}
+		}
+
+		// ===== 4. 前段错误路径（normalize / 请求拦截器 / transform / 预检取消）
+		//          按 axios 语义同样进入响应拦截器错误链 =====
+		const outcome = runResponseChain(core, false, null, stageError as RequestError, cfg)
+		settle(resolve, reject, outcome)
+	})
+}
+
+/**
+ * 唯一 adapter 收敛点：uni.request 透传（method / data / header / timeout /
+ * dataType / responseType / enableQuic / sslVerify / withCredentials /
+ * firstIpv4 / enableChunked 全量透传，null 由原生取默认）
+ *
+ * 泛型调用形态（官方 request 文档注意事项）：先声明显式泛型类型的
+ * options 变量，再传入显式泛型的 uni.request<T>()——M4 云打包实证
+ * `{...} as RequestOptions<...>` 类型断言在 uts2kotlin 转译时丢失泛型
+ * 实参（RequestOptions<Any> 裸类型不匹配）。泛型实参为数据类型 any
+ * （RequestOptions<T>.success 回调参数才是 RequestSuccess<T>）。
+ *
+ * 任务登记：拿到原生 RequestTask 后挂入 cancel 注册表（确定性 abort），
+ * 终态时注销；onTask 为逃生舱（chunked 监听等高级场景），不影响登记。
+ * task 经 taskHolder 中转：回调闭包先于 task 声明存在，直接引用
+ * task 自身会编译为 Kotlin val 初始化器自引用（编译错误）。
+ */
+function sendRequest(norm: RequestConfig, onSuccess: (res: RequestSuccess<any>) => void, onFail: (err: RequestError) => void): void {
+	const token = norm.cancelToken
+	let taskHolder: RequestTask | null = null
+	const options: RequestOptions<any> = {
+		url: norm.url,
+		method: norm.method,
+		header: norm.header,
+		data: norm.data,
+		timeout: norm.timeout,
+		dataType: norm.dataType,
+		responseType: norm.responseType,
+		enableQuic: norm.enableQuic,
+		sslVerify: norm.sslVerify,
+		withCredentials: norm.withCredentials,
+		firstIpv4: norm.firstIpv4,
+		enableChunked: norm.enableChunked,
+		success: (res: RequestSuccess<any>): void => {
+			if (token != null && taskHolder != null) {
+				unregisterCancelTask(token, taskHolder as RequestTask)
+			}
+			onSuccess(res)
+		},
+		fail: (err: RequestFail): void => {
+			if (token != null && taskHolder != null) {
+				unregisterCancelTask(token, taskHolder as RequestTask)
+			}
+			onFail(classifyFail(norm, err))
+		}
+	}
+	const task = uni.request<any>(options)
+	taskHolder = task
+	if (token != null) {
+		registerCancelTask(token, task)
+	}
+	const onTaskCallback = norm.onTask
+	if (onTaskCallback != null) {
+		onTaskCallback(task)
+	}
+}
+
+/**
+ * 原生 fail 归类（确定性映射，设计 3.3）：
+ * token 已取消 → ERR_CANCELED（取消语义确定性，不依赖 errMsg 特征）；
+ * errCode 5 → ERR_TIMEOUT；600003 / 600010 → ERR_NETWORK；其余 → ERR_NATIVE。
+ * nativeErrCode 一律原值透传。
+ */
+function classifyFail(norm: RequestConfig, err: RequestFail): RequestError {
+	const token = norm.cancelToken
+	if (token != null && token.canceled) {
+		return buildRequestError('ERR_CANCELED', buildCancelErrMsg(token.reason), null, null, norm, null)
+	}
+	const code = err.errCode
+	let errCode: RequestErrorCode = 'ERR_NATIVE'
+	if (code == 5) {
+		errCode = 'ERR_TIMEOUT'
+	} else if (code == 600003 || code == 600010) {
+		errCode = 'ERR_NETWORK'
+	}
+	return buildRequestError(errCode, err.errMsg, code, null, norm, null)
+}
+
+/**
+ * 响应拦截器链状态机（设计 3.4）
+ *
+ * - 成功态：onFulfilled 变换响应；抛异常 → 转 ERR_NATIVE 错误态
+ * - 错误态：onRejected 返回 ResponseResult → 恢复（后续拦截器回到成功态）；
+ *   返回 RequestError → 换错继续；返回 null → 放行原错误；抛异常 → ERR_NATIVE
+ * - onFulfilled 仅在成功态生效，onRejected 仅在错误态生效（axios 链语义）
+ */
+function runResponseChain(core: InstanceCore, ok: boolean, res: ResponseAny | null, err: RequestError | null, cfg: RequestConfig | null): ChainOutcome {
+	let curOk = ok
+	let curRes = res
+	let curErr = err
+	const list = core.responseInterceptors
+	for (let i = 0; i < list.length; i++) {
+		const entry = list[i]
+		if (curOk) {
+			const fn = entry.onFulfilled
+			const input = curRes
+			if (fn != null && input != null) {
+				try {
+					curRes = fn(input)
+				} catch (e) {
+					curOk = false
+					curRes = null
+					curErr = buildRequestError('ERR_NATIVE', '响应拦截器执行异常', null, null, cfg, null)
+				}
+			}
+		} else {
+			const onRejected = entry.onRejected
+			const input = curErr
+			if (onRejected != null && input != null) {
+				try {
+					const returned = onRejected(input)
+					if (returned == null) {
+						// 放行：携带原错误继续 reject
+					} else if (isRequestErrorValue(returned)) {
+						// 换错：以新错误继续 reject
+						curErr = returned as RequestError
+						curRes = null
+					} else {
+						// 恢复：转 resolve，后续拦截器回到成功态
+						curOk = true
+						curRes = returned as ResponseAny
+						curErr = null
+					}
+				} catch (e) {
+					curOk = false
+					curRes = null
+					curErr = buildRequestError('ERR_NATIVE', '响应拦截器错误处理异常', null, null, cfg, null)
+				}
+			}
+		}
+	}
+	const outcome: ChainOutcome = { ok: curOk, res: curRes, err: curErr }
+	return outcome
+}
+
+/** 终态收敛（成功态必须有响应；异常情况兜底 ERR_NATIVE） */
+function settle<T>(resolve: (value: ResponseResult<T>) => void, reject: (reason: RequestError) => void, outcome: ChainOutcome): void {
+	const res = outcome.res
+	const err = outcome.err
+	if (outcome.ok && res != null) {
+		resolve(res as ResponseResult<T>)
+	} else if (err != null) {
+		reject(err)
+	} else {
+		reject(buildRequestError('ERR_NATIVE', '拦截器链路无有效结果', null, null, null, null))
+	}
+}
+
+/** 取消错误信息（携带 cancel 原因） */
+function buildCancelErrMsg(reason: string | null): string {
+	if (reason != null) {
+		return '请求已取消：' + reason
+	}
+	return '请求已取消'
+}

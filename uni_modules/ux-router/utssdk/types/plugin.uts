@@ -1,0 +1,108 @@
+/**
+ * 路由器插件类型定义（PluginContext 与 RouterPlugin）
+ *
+ * 采用核心 + 插件架构（对齐 uni-router / Swiper.js 风格）：
+ * 核心仅提供路由匹配、导航执行、守卫链、状态同步等原生能力；
+ * 扩展能力（如拦截 uni 导航 API）通过插件提供，用户按需注册。
+ *
+ * PluginContext 采用 class：非蒸汽（Kotlin/Swift）端不支持「含方法的对象字面量 type」。
+ */
+import type { App } from 'vue'
+import type { Router, RouterOptions } from './router'
+import type { RouteLocation, RouteLocationRaw } from './route'
+import type { UniNavigationOptions } from '../navigation/type'
+import type { ParamsManager } from '../plugins/params/type'
+
+/** 插件导航阶段（含返回） */
+export type PluginNavigationMode = 'push' | 'replace' | 'relaunch' | 'back'
+
+/** 插件间共享数据（各阶段传递，供插件读写；UTS 中以 Map 承载） */
+export type PluginData = Map<string, any>
+
+/** 导航准备上下文：uni API 调用前，插件可修改导航 query 与选项 */
+export type NavigationPrepareContext = {
+	to: RouteLocation
+	from: RouteLocation
+	mode: PluginNavigationMode
+	pluginData: PluginData
+	/** 实际导航 URL 的 query（可变：插件可添加内部 key） */
+	query: Map<string, string>
+	/** uni 导航选项（可变：插件可修改） */
+	options: UniNavigationOptions
+}
+
+/** 导航完成上下文：uni API 调用成功后，插件可扩展导航结果 */
+export type NavigationCompleteContext = {
+	to: RouteLocation
+	mode: PluginNavigationMode
+	pluginData: PluginData
+	/** 导航结果（可变：插件可扩展） */
+	result: RouteLocation
+}
+
+/**
+ * 插件上下文
+ * 路由器暴露给插件的 hook 注册接口（class 承载，避免原生端对象字面量含方法被推断为 UTSJSONObject）
+ */
+export class PluginContext {
+	/** matcher.resolve() 前增强原始路由位置 */
+	onEnrichLocation: (hook: (location: RouteLocationRaw) => RouteLocationRaw) => void
+	/** resolve 之后、守卫之前，从增强的路由位置中提取插件数据 */
+	onAfterResolve: (hook: (enrichedLocation: RouteLocationRaw, pluginData: PluginData) => void) => void
+	/** uni API 调用前，修改导航 URL query 与选项 */
+	onPrepareNavigation: (hook: (ctx: NavigationPrepareContext) => void) => void
+	/** 真正调用 uni 导航 API 前（可异步：如 H5 返回需先播完退出动画），串行执行 */
+	onBeforeNavigation: (hook: (ctx: NavigationPrepareContext) => Promise<void> | void) => void
+	/** uni API 调用成功后，扩展导航结果 */
+	onCompleteNavigation: (hook: (ctx: NavigationCompleteContext) => void) => void
+	/** 导航中止或失败时执行清理 */
+	onNavigationAbort: (hook: (pluginData: PluginData) => void) => void
+	/** 路由状态同步期间，从 URL query 提取插件数据 */
+	onRouteSync: (hook: (query: Map<string, string>, params: Map<string, string>) => void) => void
+	/** router.install() 被调用时触发，插件可注册 app 级清理逻辑 */
+	onAppInstall: (hook: (app: any) => void) => void
+
+	/** 当前路由位置读取器（安装时注入，保证实时读取） */
+	currentRouteReader: () => RouteLocation
+	/** 解析路由位置为完整 RouteLocation */
+	resolve: (location: RouteLocationRaw) => RouteLocation
+	/** 路由器实例引用（any：避免原生端 interface 型的跨文件退化问题，插件内按需 as Router） */
+	router: any
+	/** 核心共享的 ParamsManager 实例（供 ParamsPlugin 使用；插件内按需 as ParamsManager） */
+	paramsManager: any
+	/** 检查指定插件是否已注册 */
+	hasPlugin: (name: string) => boolean
+
+	constructor() {
+		this.onEnrichLocation = (hook) => { void hook }
+		this.onAfterResolve = (hook) => { void hook }
+		this.onPrepareNavigation = (hook) => { void hook }
+		this.onBeforeNavigation = (hook) => { void hook }
+		this.onCompleteNavigation = (hook) => { void hook }
+		this.onNavigationAbort = (hook) => { void hook }
+		this.onRouteSync = (hook) => { void hook }
+		this.onAppInstall = (hook) => { void hook }
+		this.currentRouteReader = () => this.currentRoute
+		this.resolve = (location) => { void location; return this.currentRoute }
+		this.router = null as any
+		this.paramsManager = null as any
+		this.hasPlugin = (name) => { void name; return false }
+	}
+
+	/** 当前路由位置（只读，经注入的读取器实时取值） */
+	get currentRoute(): RouteLocation {
+		return this.currentRouteReader()
+	}
+}
+
+/**
+ * 路由器插件基类
+ * 采用 abstract class：非蒸汽（Kotlin/Swift）端对象字面量含方法会被推断为 UTSJSONObject，
+ * 故内置插件以 class 继承实现；注册时传入实例 `plugins: [new ParamsPlugin()]`。
+ */
+export abstract class RouterPlugin {
+	/** 插件名称 */
+	name: string = ''
+	/** 安装插件：通过 context 注册 hook，从 options 读取插件选项 */
+	abstract install(context: PluginContext, options: RouterOptions): void
+}

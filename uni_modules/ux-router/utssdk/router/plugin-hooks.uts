@@ -1,0 +1,173 @@
+/**
+ * 插件 hook 管理器
+ *
+ * 负责插件安装、PluginContext 构建、hook 注册与各导航阶段的 hook 调度，
+ * 以及插件注册状态（installedPlugins）管理。
+ */
+import type { App } from 'vue'
+import type {
+	PluginContext,
+	PluginData,
+	RouterPlugin,
+	RouteLocation,
+	RouteLocationRaw,
+	Router,
+	RouterOptions,
+	NavigationPrepareContext,
+	NavigationCompleteContext
+} from '../types'
+import type { ParamsManager } from '../plugins/params/type'
+import { warn } from '../utils'
+
+/** enrichLocation hook 类型 */
+export type EnrichLocationHook = (location: RouteLocationRaw) => RouteLocationRaw
+/** afterResolve hook 类型 */
+export type AfterResolveHook = (enrichedLocation: RouteLocationRaw, pluginData: PluginData) => void
+/** prepareNavigation hook 类型 */
+export type PrepareNavigationHook = (ctx: NavigationPrepareContext) => void
+/** beforeNavigation hook 类型（可异步，如 H5 返回动画） */
+export type BeforeNavigationHook = (ctx: NavigationPrepareContext) => Promise<void> | void
+/** completeNavigation hook 类型 */
+export type CompleteNavigationHook = (ctx: NavigationCompleteContext) => void
+/** navigationAbort hook 类型 */
+export type NavigationAbortHook = (pluginData: PluginData) => void
+/** routeSync hook 类型 */
+export type RouteSyncHook = (query: Map<string, string>, params: Map<string, string>) => void
+/** appInstall hook 类型 */
+export type AppInstallHook = (app: any) => void
+
+/** PluginHookManager 依赖（由路由器注入：直接引用 router 与 paramsManager，避免含方法的对象字面量） */
+
+/**
+ * 插件 hook 管理器：维护各 hook 队列，安装插件并调度 hook
+ */
+export class PluginHookManager {
+	private enrichLocationHooks: EnrichLocationHook[] = []
+	private afterResolveHooks: AfterResolveHook[] = []
+	private prepareNavigationHooks: PrepareNavigationHook[] = []
+	private beforeNavigationHooks: BeforeNavigationHook[] = []
+	private completeNavigationHooks: CompleteNavigationHook[] = []
+	private navigationAbortHooks: NavigationAbortHook[] = []
+	private routeSyncHooks: RouteSyncHook[] = []
+	private appInstallHooks: AppInstallHook[] = []
+	private installedPlugins: Set<string> = new Set()
+
+	constructor(private router: Router, private paramsManager: ParamsManager) {}
+
+	/** 安装插件并注册 hook */
+	install(plugins: RouterPlugin[], options: RouterOptions): void {
+		const deps = this
+		const context = new PluginContext()
+		context.onEnrichLocation = hook => {
+			this.enrichLocationHooks.push(hook)
+		}
+		context.onAfterResolve = (hook) => {
+			this.afterResolveHooks.push(hook)
+		}
+		context.onPrepareNavigation = (hook) => {
+			this.prepareNavigationHooks.push(hook)
+		}
+		context.onBeforeNavigation = (hook) => {
+			this.beforeNavigationHooks.push(hook)
+		}
+		context.onCompleteNavigation = (hook) => {
+			this.completeNavigationHooks.push(hook)
+		}
+		context.onNavigationAbort = (hook) => {
+			this.navigationAbortHooks.push(hook)
+		}
+		context.onRouteSync = (hook) => {
+			this.routeSyncHooks.push(hook)
+		}
+		context.onAppInstall = (hook) => {
+			this.appInstallHooks.push(hook)
+		}
+		context.currentRouteReader = () => deps.router.currentRoute
+		context.resolve = location => deps.router.resolve(location)
+		context.router = deps.router
+		context.paramsManager = deps.paramsManager
+		context.hasPlugin = name => this.installedPlugins.has(name)
+
+		for (var i = 0; i < plugins.length; i++) {
+			const plugin = plugins[i]
+			this.installedPlugins.add(plugin.name)
+			plugin.install(context, options)
+		}
+
+		// 检查设置了插件选项但未注册对应插件
+		if (options.interceptUniApi === true && !this.installedPlugins.has('interceptor')) {
+			warn('options.interceptUniApi is true but InterceptorPlugin is not registered. The option will be ignored.')
+		}
+		if (options.paramsPersistent === true && !this.installedPlugins.has('params')) {
+			warn('options.paramsPersistent is true but ParamsPlugin is not registered. The option will be ignored.')
+		}
+	}
+
+	/** 检查指定插件是否已注册 */
+	hasPlugin(name: string): boolean {
+		return this.installedPlugins.has(name)
+	}
+
+	/** 执行 enrichLocation hooks，返回增强后的路由位置 */
+	enrichLocation(location: RouteLocationRaw): RouteLocationRaw {
+		let result = location
+		for (var i = 0; i < this.enrichLocationHooks.length; i++) {
+			result = this.enrichLocationHooks[i](result)
+		}
+		return result
+	}
+
+	/** 执行 afterResolve hooks，将插件数据提取到 pluginData */
+	afterResolve(enrichedLocation: RouteLocationRaw, pluginData: PluginData): void {
+		for (var i = 0; i < this.afterResolveHooks.length; i++) {
+			this.afterResolveHooks[i](enrichedLocation, pluginData)
+		}
+	}
+
+	/** 执行 prepareNavigation hooks，修改导航 query 与选项 */
+	prepareNavigation(ctx: NavigationPrepareContext): void {
+		for (var i = 0; i < this.prepareNavigationHooks.length; i++) {
+			this.prepareNavigationHooks[i](ctx)
+		}
+	}
+
+	/** 执行 beforeNavigation hooks（可能异步），串行等待完成 */
+	async beforeNavigation(ctx: NavigationPrepareContext): Promise<void> {
+		for (var i = 0; i < this.beforeNavigationHooks.length; i++) {
+			await this.beforeNavigationHooks[i](ctx)
+		}
+	}
+
+	/** 执行 completeNavigation hooks，扩展导航结果 */
+	completeNavigation(ctx: NavigationCompleteContext): void {
+		for (var i = 0; i < this.completeNavigationHooks.length; i++) {
+			this.completeNavigationHooks[i](ctx)
+		}
+	}
+
+	/** 执行所有 abort hooks（导航中止或失败时清理插件资源） */
+	runAbortHooks(pluginData: PluginData): void {
+		for (var i = 0; i < this.navigationAbortHooks.length; i++) {
+			try {
+				this.navigationAbortHooks[i](pluginData)
+			} catch (e) {
+				// abort hooks 不应抛出
+				void e
+			}
+		}
+	}
+
+	/** 执行 routeSync hooks，从 URL query 提取插件数据到 params */
+	runRouteSyncHooks(query: Map<string, string>, params: Map<string, string>): void {
+		for (var i = 0; i < this.routeSyncHooks.length; i++) {
+			this.routeSyncHooks[i](query, params)
+		}
+	}
+
+	/** 执行 appInstall hooks */
+	runAppInstallHooks(app: any): void {
+		for (var i = 0; i < this.appInstallHooks.length; i++) {
+			this.appInstallHooks[i](app)
+		}
+	}
+}

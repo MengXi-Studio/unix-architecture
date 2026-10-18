@@ -1,0 +1,237 @@
+/**
+ * unix-request 对外 API 声明（interface.uts，官方必需）
+ *
+ * 「声明和实现」分层（官方 UTS 插件架构）：
+ * - 本文件内联声明全部对外类型，供 uts-proxy V1 生成参数编码与
+ *   HBuilderX 语法提示（parseInterfaceTypes 仅解析本文件的内联声明）
+ * - 对外 API 在本插件入口 index.uts 内联声明（V1 代理只解析平台入口的
+ *   内联 export function / export const，re-export 链不可见）
+ * - 实现层引用本文件类型统一经 request/types/request.uts 转发（同一符号，
+ *   满足 UTS 名义类型系统，无双重定义漂移）
+ *
+ * 红线（继承 unix-utils v0.8 实战，LESSONS_LEARNED 19/21）：
+ * 1. RequestConfig 除 url 外全部可选（uts-proxy 代理层对必填字段生成
+ *    非空强转，业务漏传即 NPE；可选字段才生成 null-safe 编码）
+ * 2. method / 错误 code 一律字面量联合类型（UTS enum 无法跨 uts-proxy）
+ */
+
+/** 请求方法（对齐 uni.request method） */
+export type RequestMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+
+/** 统一错误码（对标 AxiosError code；原生 errCode 由 nativeErrCode 原值透传不翻译） */
+export type RequestErrorCode =
+	| 'ERR_PARAM' // 参数非法（url 为空等）
+	| 'ERR_CONFIG' // 配置非法（未设 baseURL 却用相对路径等）
+	| 'ERR_CANCELED' // 主动取消（cancelToken）
+	| 'ERR_TIMEOUT' // 超时（原生 errCode 5 归类）
+	| 'ERR_NETWORK' // 网络错误（原生 600003 等网络类归类）
+	| 'ERR_BAD_REQUEST' // HTTP 4xx（validateStatus 未通过且 statusCode < 500）
+	| 'ERR_BAD_RESPONSE' // HTTP 5xx（validateStatus 未通过且 statusCode >= 500）
+	| 'ERR_NATIVE' // 其余原生失败
+
+/** 取消令牌 */
+export type CancelToken = {
+	/** 是否已取消 */
+	canceled: boolean
+	/** 取消原因；未取消为 null */
+	reason: string | null
+}
+
+/** 取消源（createCancelSource 返回，与 axios CancelToken.source() 同心智） */
+export type CancelSource = {
+	/** 关联令牌（挂到 RequestConfig.cancelToken） */
+	token: CancelToken
+	/** 取消该令牌关联的全部进行中请求 */
+	cancel: (reason: string | null) => void
+}
+
+/**
+ * 请求配置（对标 axios config）。
+ *
+ * 除 url 外全部可选；实现层统一对可空值判空兜底（三级合并回退实例默认 → 内置默认）。
+ */
+export type RequestConfig = {
+	/** 请求路径；相对路径拼接 baseURL（实例默认 < 请求级覆盖），http(s) 开头原样使用 */
+	url: string
+	/** 请求方法；不传或 null 使用实例默认（GET） */
+	method?: RequestMethod | null
+	/** baseURL 请求级覆盖 */
+	baseURL?: string | null
+	/** 查询参数：与 url 既有 query 合并，库内统一编码拼接 */
+	params?: UTSJSONObject | null
+	/** 请求体；GET/HEAD 的 UTSJSONObject 自动并入 query */
+	data?: any | null
+	/** 请求 header；与实例默认 header 浅合并（请求级同名键覆盖） */
+	header?: UTSJSONObject | null
+	/** 超时毫秒；不传或 null 使用实例默认（60000） */
+	timeout?: number | null
+	/** 响应 dataType（json / 其他），透传原生 adapter */
+	dataType?: string | null
+	/** 响应数据类型，透传原生（ArrayBuffer 场景：app-android 4.51+ / app-ios 4.61+） */
+	responseType?: string | null
+	/** 以下原生能力参数全量透传，本库不抹平，各端生效性见官方文档 */
+	enableQuic?: boolean | null
+	sslVerify?: boolean | null
+	withCredentials?: boolean | null
+	firstIpv4?: boolean | null
+	enableChunked?: boolean | null
+	/** 状态码校验；不传或 null 使用实例默认（2xx） */
+	validateStatus?: ((statusCode: number) => boolean) | null
+	/** 取消令牌；不传或 null 表示不可取消 */
+	cancelToken?: CancelToken | null
+	/** 请求体变换；提供即替换内置行为（data 可空：GET/HEAD 归一化后恒为 null，M4 Kotlin 空安全约束） */
+	transformRequest?: ((data: any | null) => any) | null
+	/** 响应体变换；提供即替换内置（内置为原样透传；参数可空同上） */
+	transformResponse?: ((data: any | null) => any) | null
+	/** 逃生舱：拿到原生 RequestTask（chunked 监听等高级场景） */
+	onTask?: ((task: RequestTask) => void) | null
+}
+
+/**
+ * 快捷方法 / 实例快捷方法的请求级配置（对标 axios.get(url, config) 的 config）。
+ *
+ * 不含 url 字段：url 由方法参数提供，避免调用方为满足 RequestConfig.url
+ * 必填而传占位值。除 url 外字段与 RequestConfig 一一对应。
+ */
+export type RequestQuickConfig = {
+	/** 请求方法；不传或 null 使用实例默认（GET） */
+	method?: RequestMethod | null
+	/** baseURL 请求级覆盖 */
+	baseURL?: string | null
+	/** 查询参数：与 url 既有 query 合并，库内统一编码拼接 */
+	params?: UTSJSONObject | null
+	/** 请求体；GET/HEAD 的 UTSJSONObject 自动并入 query */
+	data?: any | null
+	/** 请求 header；与实例默认 header 浅合并（请求级同名键覆盖） */
+	header?: UTSJSONObject | null
+	/** 超时毫秒；不传或 null 使用实例默认（60000） */
+	timeout?: number | null
+	/** 响应 dataType（json / 其他），透传原生 adapter */
+	dataType?: string | null
+	/** 响应数据类型，透传原生（ArrayBuffer 场景：app-android 4.51+ / app-ios 4.61+） */
+	responseType?: string | null
+	/** 以下原生能力参数全量透传，本库不抹平，各端生效性见官方文档 */
+	enableQuic?: boolean | null
+	sslVerify?: boolean | null
+	withCredentials?: boolean | null
+	firstIpv4?: boolean | null
+	enableChunked?: boolean | null
+	/** 状态码校验；不传或 null 使用实例默认（2xx） */
+	validateStatus?: ((statusCode: number) => boolean) | null
+	/** 取消令牌；不传或 null 表示不可取消 */
+	cancelToken?: CancelToken | null
+	/** 请求体变换；提供即替换内置行为（data 可空，同 RequestConfig） */
+	transformRequest?: ((data: any | null) => any) | null
+	/** 响应体变换；提供即替换内置（内置为原样透传；参数可空同上） */
+	transformResponse?: ((data: any | null) => any) | null
+	/** 逃生舱：拿到原生 RequestTask（chunked 监听等高级场景） */
+	onTask?: ((task: RequestTask) => void) | null
+}
+
+/** 全局 / 实例默认配置（configureRequest / createRequest / setConfig 入参；null 表示沿用内置默认） */
+export type RequestDefaults = {
+	/** 默认 baseURL */
+	baseURL: string | null
+	/** 默认超时（毫秒） */
+	timeout: number | null
+	/** 默认 header（与请求级浅合并） */
+	header: UTSJSONObject | null
+	/** 默认状态码校验 */
+	validateStatus: ((statusCode: number) => boolean) | null
+}
+
+/**
+ * 统一响应结构（对标 axios response schema；statusText 原生无，request 引用不暴露）。
+ *
+ * data 泛型为 M2 spike 项（Q10）：uts-proxy 对插件导出泛型的支持待编译验证，
+ * 失败则降级为 data: any。
+ */
+export type ResponseResult<T> = {
+	data: T
+	statusCode: number
+	header: any
+	cookies: Array<string>
+	/** 发起该请求的最终合并配置（axios response.config 对标） */
+	config: RequestConfig | null
+}
+
+/** 非泛型响应别名（实例方法 / 拦截器等 data 以 any 流转的场景） */
+export type ResponseAny = ResponseResult<any>
+
+/** 统一错误结构（对标 AxiosError：code 体系 + config / response 挂载 + 原生 errCode 不丢失） */
+export type RequestError = {
+	/** 库内错误码（字面量联合） */
+	code: RequestErrorCode
+	/** 固定主题，便于业务过滤 */
+	errSubject: string
+	/** 错误描述 */
+	errMsg: string
+	/** 原生 fail errCode 原值透传（5 / 600003 / …），库内错误为 null */
+	nativeErrCode: number | null
+	/** HTTP 状态码（BAD_REQUEST / BAD_RESPONSE 时） */
+	statusCode: number | null
+	/** 发起该请求的最终合并配置（axios error.config 对标） */
+	config: RequestConfig | null
+	/** HTTP 错误时携带响应原文（含 4xx/5xx body，axios error.response 对标） */
+	response: ResponseAny | null
+}
+
+/**
+ * 实例对象（createRequest 返回，与默认实例同构）。
+ *
+ * UTS 无 call signature，统一走 instance.request(config)；delete 为 UTS
+ * 保留字，快捷方法命名 del。实例方法 data 以 any 返回（业务侧按需断言），
+ * 泛型仅顶层 API 提供（跨代理形态见 Q10 spike 结论）。
+ */
+export type RequestInstance = {
+	request: (config: RequestConfig) => Promise<ResponseAny>
+	get: (url: string, config: RequestQuickConfig | null) => Promise<ResponseAny>
+	post: (url: string, data: any | null, config: RequestQuickConfig | null) => Promise<ResponseAny>
+	put: (url: string, data: any | null, config: RequestQuickConfig | null) => Promise<ResponseAny>
+	patch: (url: string, data: any | null, config: RequestQuickConfig | null) => Promise<ResponseAny>
+	del: (url: string, config: RequestQuickConfig | null) => Promise<ResponseAny>
+	head: (url: string, config: RequestQuickConfig | null) => Promise<ResponseAny>
+	options: (url: string, config: RequestQuickConfig | null) => Promise<ResponseAny>
+	getUri: (config: RequestConfig | null) => string
+	setConfig: (defaults: RequestDefaults) => void
+	useRequestInterceptor: (onFulfilled: (config: RequestConfig) => RequestConfig) => number
+	useResponseInterceptor: (onFulfilled: ((res: ResponseAny) => ResponseAny) | null, onRejected: ((err: RequestError) => any | null) | null) => number
+	ejectInterceptor: (id: number) => void
+}
+
+/* ============================================================
+ * API 函数类型别名（官方模式）
+ *
+ * 非泛型 API 以 `export const apiName: ApiType = function (...) {}`
+ * 形态声明入口。实现层函数一律加 Impl 后缀（同名 top-level 符号
+ * 触发 Kotlin 导出符号静默重整）。
+ *
+ * 泛型 API（request / 快捷方法）不走本表：M4 云打包实证 UTS 的
+ * `type X = <T>(...)` 函数类型别名转译为 Kotlin `typealias X = <T>(...)
+ * -> ...` 非法语法（Kotlin 泛型参数必须在 typealias 名上），且 const
+ * 绑定的泛型函数字面量 `fun <T>` 匿名形态被 Kotlin 禁止——泛型导出
+ * 统一改用入口 `export function apiName<T>(...)` 具名声明（顶层
+ * fun <T> 合法；T 仅静态标注 ResponseResult<T>，无运行时实例化需求，
+ * 规避 uts-for-android 7.6 泛型传递丢失约束）。
+ * ============================================================ */
+
+/** getUri 函数类型（构建完整 URL，含 params 编码） */
+export type RequestGetUri = (config: RequestConfig | null) => string
+
+/** 注册请求拦截器（返回 id 供 eject；M2 spike 项：函数参数直接是函数） */
+export type UseRequestInterceptor = (onFulfilled: (config: RequestConfig) => RequestConfig) => number
+
+/** 注册响应拦截器（onRejected 返回 ResponseResult 恢复 / RequestError 换错 / null 放行） */
+export type UseResponseInterceptor = (onFulfilled: ((res: ResponseAny) => ResponseAny) | null, onRejected: ((err: RequestError) => any | null) | null) => number
+
+/** 移除拦截器 */
+export type EjectInterceptor = (id: number) => void
+
+/** 默认实例全局默认配置 */
+export type ConfigureRequest = (defaults: RequestDefaults) => void
+
+/** 多实例工厂（M2 spike 项：返回含函数字段的对象跨代理） */
+export type CreateRequest = (defaults: RequestDefaults | null) => RequestInstance
+
+/** 创建取消源 */
+export type CreateCancelSource = () => CancelSource

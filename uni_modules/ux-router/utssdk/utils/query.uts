@@ -1,0 +1,57 @@
+/**
+ * 查询参数增强读取工具
+ * 提供 queryInt / queryNumber / queryBool 等从查询 Map 原子读值的能力
+ */
+
+/**
+ * 从查询 Map 读取整型值
+ * @param query - 查询键值 Map
+ * @param key - 键名
+ * @param defaultValue - 解析失败时的默认值
+ * @returns 整型值
+ */
+export function queryInt(query: Map<string, string>, key: string, defaultValue: number = 0): number {
+	const raw = query.get(key)
+	if (raw === null || raw === '') {
+		return defaultValue
+	}
+	const n = Number.parseInt(raw, 10)
+	if (isNaN(n)) {
+		return defaultValue
+	}
+	return n
+}
+
+/**
+ * 从查询 Map 读取数值
+ * @param query - 查询键值 Map
+ * @param key - 键名
+ * @param defaultValue - 解析失败时的默认值
+ * @returns 数值
+ */
+export function queryNumber(query: Map<string, string>, key: string, defaultValue: number = 0): number {
+	const raw = query.get(key)
+	if (raw === null || raw === '') {
+		return defaultValue
+	}
+	const n = Number.parseFloat(raw)
+	if (isNaN(n)) {
+		return defaultValue
+	}
+	return n
+}
+
+/**
+ * 从查询 Map 读取布尔值（'' / '0' / 'false' 视为 false）
+ * @param query - 查询键值 Map
+ * @param key - 键名
+ * @param defaultValue - 解析失败时的默认值
+ * @returns 布尔值
+ */
+export function queryBool(query: Map<string, string>, key: string, defaultValue: boolean = false): boolean {
+	const raw = query.get(key)
+	if (raw === null || raw === '') {
+		return defaultValue
+	}
+	return raw !== '0' && raw !== 'false'
+}

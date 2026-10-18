@@ -1,0 +1,103 @@
+/**
+ * ParamsPlugin - 页面参数管理插件（对齐 uni-router）
+ *
+ * 将页面参数存入 ParamsManager，通过 URL query 中的 __params_key 关联传递：
+ * - onEnrichLocation：把 location.params 存入 manager 并生成 key 注入 query
+ * - onAfterResolve：从增强位置提取 key 存入 pluginData
+ * - onPrepareNavigation：将 key 拼入导航 URL query
+ * - onRouteSync：从 URL query 读 key，peek 重建 params 并移除内部 key
+ *
+ * class 实现：非蒸汽（Kotlin/Swift）端对象字面量含方法会被推断为 UTSJSONObject。
+ */
+import type { PluginContext, RouterOptions, RawLocation } from '../../types'
+import { RouterPlugin } from '../../types'
+import { PARAMS_QUERY_KEY } from '../../constants'
+import { createParamsManager } from './params-manager'
+import type { ParamsManager } from './type'
+
+export { createParamsManager } from './params-manager'
+export type { ParamsManager } from './type'
+
+/** params 插件数据的 pluginData 键 */
+const PLUGIN_DATA_KEY = 'params'
+
+/** 将 params 注入 location 的 query（返回新 location） */
+function injectQueryKey(location: RawLocation, key: string, value: string): RawLocation {
+	const query = new Map<string, string>(location.query ?? new Map<string, string>())
+	query.set(key, value)
+	return { ...location, query }
+}
+
+/** 从 location 的 query 中读取 key（无该 key 时返回 null） */
+function extractQueryKey(location: RawLocation, key: string): string | null {
+	const query = location.query
+	if (query == null) {
+		return null
+	}
+	const v = query.get(key)
+	return v == null ? null : v
+}
+
+/**
+ * ParamsPlugin - 页面参数传递插件
+ * 需注册后 router.push/replace/relaunch 才支持 params。
+ * 注册：plugins: [new ParamsPlugin()]
+ */
+export class ParamsPlugin extends RouterPlugin {
+	constructor() {
+		super()
+		this.name = 'params'
+	}
+
+	override install(context: PluginContext, options: RouterOptions): void {
+		const persistent = options.paramsPersistent === true
+		const paramsManager: ParamsManager = createParamsManager(persistent)
+
+		// resolve 前：将 params 存入 manager，key 注入 query
+		context.onEnrichLocation(location => {
+			if (typeof location === 'string') {
+				return location
+			}
+			const loc = location as RawLocation
+			if (loc.params == null || loc.params.size === 0) {
+				return location
+			}
+			const key = paramsManager.set(loc.params)
+			return injectQueryKey(loc, PARAMS_QUERY_KEY, key)
+		})
+
+		// resolve 后：提取 key 存入 pluginData
+		context.onAfterResolve((enrichedLocation, pluginData) => {
+			if (typeof enrichedLocation !== 'string') {
+				const raw = enrichedLocation as RawLocation
+				const key = extractQueryKey(raw, PARAMS_QUERY_KEY)
+				if (key !== null && key.length > 0) {
+					pluginData.set(PLUGIN_DATA_KEY, key)
+				}
+			}
+		})
+
+		// 导航前：将 key 拼入导航 URL query
+		context.onPrepareNavigation(ctx => {
+			const key = ctx.pluginData.get(PLUGIN_DATA_KEY)
+			if (key !== null) {
+				ctx.query.set(PARAMS_QUERY_KEY, key as string)
+			}
+		})
+
+		// 状态同步：从 query 读 key，重建 params 并移除内部 key
+		context.onRouteSync((query, params) => {
+			const key = query.get(PARAMS_QUERY_KEY)
+			if (key === null) {
+				return
+			}
+			const resolved = paramsManager.peek(key)
+			if (resolved !== null) {
+				resolved.forEach((value, k) => {
+					params.set(k, value)
+				})
+			}
+			query.delete(PARAMS_QUERY_KEY)
+		})
+	}
+}

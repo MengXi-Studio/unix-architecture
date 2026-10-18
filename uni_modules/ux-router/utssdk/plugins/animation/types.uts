@@ -1,0 +1,59 @@
+/**
+ * 动画插件类型与解析工具
+ */
+import type { AnimationType, NavigationAnimation, RawLocation, RouteLocationRaw } from '../../types'
+
+/** 动画默认持续时间（ms） */
+export const DEFAULT_ANIMATION_DURATION: number = 300
+
+/** pluginData 中单次动画的存储 key（避免污染 RouteLocation） */
+export const ANIM_DATA_KEY: string = '__animation__'
+
+/**
+ * 从路由位置读取单次动画配置（无则返回 null）
+ * @param location - 增强前的原始路由位置（可空）
+ */
+export function pickAnimation(location: RouteLocationRaw | null): NavigationAnimation | null {
+	if (location === null || typeof location === 'string') {
+		return null
+	}
+	const raw = location as RawLocation
+	// H5 端可选字段缺省为 undefined（非 null），统一归一化后判断
+	const animType: string | null = raw.animationType ?? null
+	if (animType === null || animType.length === 0) {
+		return null
+	}
+	return {
+		type: animType as AnimationType,
+		duration: raw.animationDuration ?? null
+	}
+}
+
+/**
+ * 归一化动画配置（补默认时长）
+ */
+export function normalizeAnimation(anim: NavigationAnimation): NavigationAnimation {
+	return {
+		type: anim.type,
+		duration: anim.duration === null ? DEFAULT_ANIMATION_DURATION : anim.duration
+	}
+}
+
+/**
+ * 将进入型动画类型映射为对应的退出型（back 关闭动画用）
+ * 已是退出型原样返回；auto / none 返回 none（不播）。
+ */
+export function toExitType(type: AnimationType): AnimationType {
+	switch (type) {
+		case 'slide-in-right': return 'slide-out-right'
+		case 'slide-in-left': return 'slide-out-left'
+		case 'slide-in-top': return 'slide-out-top'
+		case 'slide-in-bottom': return 'slide-out-bottom'
+		case 'fade-in': return 'fade-out'
+		case 'zoom-in': return 'zoom-out'
+		case 'zoom-fade-in': return 'zoom-fade-out'
+		case 'pop-in': return 'pop-out'
+		case 'auto': return 'none'
+		default: return type
+	}
+}

@@ -1,0 +1,9 @@
+/**
+ * 错误类型转发（类与函数定义见 ../errors）
+ */
+import { RouterError } from '../errors/router-error'
+import { NavigationFailure } from '../errors/navigation-failure'
+import { isNavigationFailure } from '../errors/is-navigation-failure'
+
+export { RouterError, NavigationFailure, isNavigationFailure }
+export type { UniNavigationApiError } from '../errors/router-error'

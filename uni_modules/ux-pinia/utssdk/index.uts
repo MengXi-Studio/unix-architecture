@@ -1,0 +1,94 @@
+/**
+ * unix-pinia 插件跨平台根入口（uni_modules UTS 插件）
+ *
+ * 官方架构（对齐 unix-storage）：本文件即无平台目录端（全端）的实现入口。
+ * 对外 API 一律在本入口**内联声明**（export function 具名实现，转发领域层
+ * Impl 函数）——红线：不得用 export { x } from 转发链对外暴露 API，
+ * uts-proxy V1 只解析本入口的内联声明（云打包 Kotlin 编译实证）。
+ *
+ * 红线（unix-storage 实战）：
+ * 1. 插件内所有 .uts 同 Kotlin package，实现函数一律 Impl 后缀，
+ *    避免同名 top-level 符号触发导出符号静默重整（__1）；
+ * 2. 对外类型集中于 interface.uts，入口经 export type 转发（类型转发
+ *    可用，API 函数转发不可用）；Pinia class 经 import type 使返回类型
+ *    对入口可见（Kotlin 生成器只为入口可见类型生成定义）。
+ */
+import type { Pinia } from './pinia/pinia.uts'
+import { createPiniaImpl, setActivePiniaImpl, getActivePiniaImpl } from './pinia/pinia.uts'
+import { defineStoreImpl } from './pinia/defineStore.uts'
+import { storeToRefsImpl } from './pinia/storeToRefs.uts'
+import { patchImpl, disposeImpl, getStoreIdImpl } from './pinia/instanceApi.uts'
+
+/**
+ * 对外类型转发（同目录 interface.uts，非跨级 re-export）：
+ * 消费方 import type { PiniaPlugin } from '@/uni_modules/ux-pinia'
+ * 须经本入口解析；Pinia class（pinia/pinia.uts）作类型标注转发。
+ */
+export type { Unsubscribe, SubscribeCallback, PiniaPlugin, PiniaPluginContext } from './interface.uts'
+export type { Pinia } from './pinia/pinia.uts'
+
+/* ============ 定义与使用（export function 具名声明） ============ */
+
+/**
+ * 定义一个 setup 式 store
+ * @param id 全局唯一标识（命名建议域名式反写，如 'user.profile'）
+ * @param setup 工厂函数：state 用 Ref、getter 用 ComputedRef、action 用箭头函数，
+ *              返回显式 type 标注的对象
+ * @returns useStore 函数；首次调用执行 setup，后续调用返回同一实例（跨页面共享）
+ */
+export function defineStore<T>(id: string, setup: () => T): () => T {
+	return defineStoreImpl<T>(id, setup)
+}
+
+/**
+ * 将 store 转为 ref 集合，供 uvue 模板解构后自动解包绑定（幂等）
+ */
+export function storeToRefs<T>(store: T): T {
+	return storeToRefsImpl<T>(store)
+}
+
+/* ============ Pinia 实例（=createPinia / setActivePinia / getActivePinia） ============ */
+
+/**
+ * 创建 Pinia 实例（承载插件列表）。
+ * 免挂载设计：纯状态管理无需调用本函数；插件场景在顶层
+ * setActivePinia(createPinia().use(plugin)) 登记后，store 创建时调度插件。
+ */
+export function createPinia(): Pinia {
+	return createPiniaImpl()
+}
+
+/** 登记当前 Pinia 实例（多实例切换 / 插件场景；P8 裁决：原生端唯一可靠形态） */
+export function setActivePinia(pinia: Pinia | null): void {
+	setActivePiniaImpl(pinia)
+}
+
+/** 获取当前 Pinia 实例；未登记且从未有 store 创建时返回 null */
+export function getActivePinia(): Pinia | null {
+	return getActivePiniaImpl()
+}
+
+/* ============ 实例 API（$-methods 的顶层函数映射） ============ */
+
+/**
+ * ≙ store.$patch(fn)：批量修改状态（仅 mutator 形态；
+ * 对象形态依赖 Partial<T> 与字段反射，UTS 不可实现，见差异对照表）
+ */
+export function patch<T>(store: T, fn: (s: T) => void): void {
+	patchImpl<T>(store, fn)
+}
+
+/**
+ * ≙ store.$dispose()：注销实例，下次 useStore() 重新执行 setup 重建。
+ * 注意既有引用将指向孤儿实例，仅用于应用级清理场景。
+ */
+export function dispose<T>(store: T): void {
+	disposeImpl<T>(store)
+}
+
+/**
+ * ≙ store.$id：反查 store id；未登记返回空串
+ */
+export function getStoreId<T>(store: T): string {
+	return getStoreIdImpl<T>(store)
+}

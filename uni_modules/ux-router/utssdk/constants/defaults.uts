@@ -1,0 +1,11 @@
+/** 守卫执行的最大重定向深度，防止守卫循环重定向导致死循环 */
+export const MAX_REDIRECT_DEPTH: number = 10
+
+/** 守卫默认超时（毫秒）：守卫在此时限内未完成将警告并中止导航，0 表示禁用 */
+export const DEFAULT_GUARD_TIMEOUT: number = 10000
+
+/** 路由器就绪超时（毫秒）：0 表示永不超时（默认） */
+export const DEFAULT_READY_TIMEOUT: number = 0
+
+/** 导航 API 受理后的页面栈确认超时（毫秒）：等待目标页真实进入栈顶的时限 */
+export const DEFAULT_NAV_VERIFY_TIMEOUT: number = 500

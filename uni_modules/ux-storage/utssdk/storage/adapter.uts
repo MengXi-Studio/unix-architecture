@@ -1,0 +1,116 @@
+/**
+ * uni.setStorage 系列原生 API 的 Promise 适配（唯一原生收敛点）
+ *
+ * Spike 结论（LESSONS_LEARNED 8/11）：
+ * - 跨端一致的安全路径 = 手动 Promise 包装（success/fail 回调形态，
+ *   success 回调参数 res.data 两端契约一致）；
+ * - uni.getStorage 对不存在 key 走 fail（errMsg 含 'data not found'），
+ *   未命中语义 = 该情形 resolve(null)，其余 fail 照常 reject。
+ *
+ * key 为已含前缀的命名空间 key（前缀拼装在 core 层，adapter 不感知）；
+ * 底层失败统一 ERR_NATIVE，业务原始 key 由 core 层补挂。
+ */
+import type { StorageError, StorageInfo } from '../interface.uts'
+import { buildStorageError } from './utils/error'
+import { BUILTIN_NOT_FOUND_MARK } from './constants/defaults'
+
+/** 写入原始 key-value（data 为本库 record 包裹后的值） */
+export function setStorageRaw(key: string, data: any | null): Promise<void> {
+	if (data == null) {
+		// 官方 SetStorageOptions.data 为非空 any（Kotlin Any），写 null 编译不过；
+		// null 写入与移除对读方等价（均返回 null），分流到 removeStorageRaw
+		return removeStorageRaw(key)
+	}
+	const payload: any = data
+	return new Promise<void>((resolve, reject) => {
+		const options: SetStorageOptions = {
+			key: key,
+			data: payload,
+			success: (): void => {
+				resolve()
+			},
+			fail: (err: UniError): void => {
+				reject(buildStorageError('ERR_NATIVE', err.errMsg, err.errCode, null))
+			}
+		}
+		uni.setStorage(options)
+	})
+}
+
+/** 读取原始 value；未命中（data not found）resolve(null)，其余失败 reject */
+export function getStorageRaw(key: string): Promise<any | null> {
+	return new Promise<any | null>((resolve, reject) => {
+		const options: GetStorageOptions = {
+			key: key,
+			success: (res: GetStorageSuccess): void => {
+				resolve(res.data)
+			},
+			fail: (err: UniError): void => {
+				if (err.errMsg.indexOf(BUILTIN_NOT_FOUND_MARK) >= 0) {
+					resolve(null)
+					return
+				}
+				reject(buildStorageError('ERR_NATIVE', err.errMsg, err.errCode, null))
+			}
+		}
+		uni.getStorage(options)
+	})
+}
+
+/** 移除原始 key */
+export function removeStorageRaw(key: string): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		const options: RemoveStorageOptions = {
+			key: key,
+			success: (): void => {
+				resolve()
+			},
+			fail: (err: UniError): void => {
+				reject(buildStorageError('ERR_NATIVE', err.errMsg, err.errCode, null))
+			}
+		}
+		uni.removeStorage(options)
+	})
+}
+
+/** 批量删除（顺序链式；任一失败即整体 reject，已删项不回滚） */
+export function removeStorageBatchRaw(keys: Array<string>): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		removeBatchNext(keys, 0, (): void => {
+			resolve()
+		}, (e: StorageError): void => {
+			reject(e)
+		})
+	})
+}
+
+/** 批量删除链式推进（顶层函数递归，规避闭包自引用的 Kotlin val 初始化器自引用问题） */
+function removeBatchNext(keys: Array<string>, index: number, onDone: () => void, onFail: (e: StorageError) => void): void {
+	if (index >= keys.length) {
+		onDone()
+		return
+	}
+	removeStorageRaw(keys[index]).then((): void => {
+		removeBatchNext(keys, index + 1, onDone, onFail)
+	}).catch((e: any | null): void => {
+		onFail(e as StorageError)
+	})
+}
+
+/**
+ * 读取存储信息（uni.getStorageInfoSync 包装）
+ * @returns 失败返回 null（调用方转 ERR_NATIVE reject，库内不使用 throw）
+ */
+export function getStorageInfoRaw(): StorageInfo | null {
+	try {
+		const info = uni.getStorageInfoSync()
+		const result: StorageInfo = {
+			keys: info.keys,
+			currentSize: info.currentSize,
+			limitSize: info.limitSize
+		}
+		return result
+	} catch (e) {
+		return null
+	}
+}

@@ -1,0 +1,35 @@
+/**
+ * storage 内部类型（不含对外类型转发）
+ *
+ * 注意：对外类型（StorageError / StorageInfo 等）实现层直接从
+ * '../../interface.uts' 引用（唯一定义源，无双重定义漂移）。
+ * 目录入口文件不写跨级相对路径的 re-export（编译器对 index.uts 内部
+ * 跨级 export...from 解析异常：桶只引同目录）；跨级 import type 已由
+ * unix-request spike 验证可行。
+ */
+import type { StorageDefaults, StorageError } from '../../interface.uts'
+
+/**
+ * 实例核心（默认实例与 createStorage 实例同构；defaults 全隔离）
+ */
+export type StorageCore = {
+	/** 实例默认配置（TTL / 前缀合并的中间层，字段 null 回退内置默认） */
+	defaults: StorageDefaults
+}
+
+/**
+ * 存储记录包裹（本库 set 路径唯一写入格式）
+ */
+export type StorageRecord = {
+	/** 业务数据原值（读回为 UTSJSONObject，业务侧 JSON.parse<T> 还原） */
+	data: any | null
+	/** 过期时间戳（毫秒）；null = 永不过期 */
+	expire: number | null
+}
+
+/** key 归一化结果（fail-fast 时 key 为 null、error 携带 ERR_PARAM） */
+export type NormalizeKeyResult = {
+	/** 已拼前缀的命名空间 key */
+	key: string | null
+	error: StorageError | null
+}

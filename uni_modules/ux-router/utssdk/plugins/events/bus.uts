@@ -1,0 +1,139 @@
+/**
+ * 自研全局事件总线（UniEventBus）
+ *
+ * 提供 $on / $off / $once / $emit（API 对齐官方 uni.$on 系列），
+ * 作为 EventsPlugin 定向 EventChannel 的底层载体。
+ * 自研目的：绕开官方 uni.$on 的版本门槛
+ * （Web 4.0 / 微信 4.41 / Android 3.91 / iOS 4.11 / Harmony 4.61），
+ * 保证旧版本基座下页面间事件通信仍可用。
+ */
+
+/** 事件回调（对齐官方 uni.$on 语义：回调接收单条数据；UTS 函数类型参数不支持 rest，故用单参数形式） */
+export type EventCallback = (data: any) => any
+
+/** 总线内部监听器记录 */
+type BusListener = {
+	id: number
+	/** 是否一次性（$once 注册） */
+	once: boolean
+	fn: (data: any) => any
+}
+
+/**
+ * 全局事件总线实例（模块级单例，跨页面共享）
+ */
+export class UniEventBus {
+	private listeners: Map<string, BusListener[]> = new Map<string, BusListener[]>()
+	private nextId: number = 1
+
+	/** 监听事件，返回监听器 id（可传 $off 移除该监听器） */
+	$on(eventName: string, fn: (data: any) => any): number {
+		const id = this.nextId++
+		const item: BusListener = { id, once: false, fn }
+		const list = this.listeners.get(eventName)
+		if (list === null) {
+			this.listeners.set(eventName, [item])
+		} else {
+			list.push(item)
+		}
+		return id
+	}
+
+	/** 监听一次事件，触发后自动移除；返回监听器 id */
+	$once(eventName: string, fn: (data: any) => any): number {
+		const id = this.nextId++
+		const item: BusListener = { id, once: true, fn }
+		const list = this.listeners.get(eventName)
+		if (list === null) {
+			this.listeners.set(eventName, [item])
+		} else {
+			list.push(item)
+		}
+		return id
+	}
+
+	/**
+	 * 移除事件监听器
+	 * @param target - 监听器 id（精确移除）；省略/null 时移除该事件的全部监听器
+	 * 注意：UTS 静态平台（Kotlin/Swift）不支持函数引用相等比较，故按 id 移除而非按回调移除
+	 * （对齐官方 uni.$on 4.31+ 的 id 语义；$on/$once 的返回值即 id）
+	 */
+	$off(eventName: string, target: number | null = null): void {
+		const list = this.listeners.get(eventName)
+		if (list === null) {
+			return
+		}
+		if (target === null) {
+			this.listeners.delete(eventName)
+			return
+		}
+		const keep: BusListener[] = []
+		for (var i = 0; i < list.length; i++) {
+			const item = list[i]
+			if (item.id !== target) {
+				keep.push(item)
+			}
+		}
+		if (keep.length === 0) {
+			this.listeners.delete(eventName)
+		} else {
+			this.listeners.set(eventName, keep)
+		}
+	}
+
+	/** 触发事件，附加参数透传给监听器 */
+	$emit(eventName: string, ...args: any[]): void {
+		const list = this.listeners.get(eventName)
+		if (list === null) {
+			return
+		}
+		// 先收集待执行回调（$once 在触发后移除，避免遍历中修改数组）
+		const pending: BusListener[] = []
+		const remain: BusListener[] = []
+		for (var i = 0; i < list.length; i++) {
+			const item = list[i]
+			pending.push(item)
+			if (!item.once) {
+				remain.push(item)
+			}
+		}
+		if (remain.length === 0) {
+			this.listeners.delete(eventName)
+		} else {
+			this.listeners.set(eventName, remain)
+		}
+		for (var j = 0; j < pending.length; j++) {
+			try {
+				if (args.length > 0) {
+					pending[j].fn(args[0])
+				}
+			} catch (e) {
+				// 单个监听器异常不阻断其余监听器
+				void e
+			}
+		}
+	}
+
+	/** 别名：on（同 $on） */
+	on(eventName: string, fn: (data: any) => any): number {
+		return this.$on(eventName, fn)
+	}
+
+	/** 别名：once（同 $once） */
+	once(eventName: string, fn: (data: any) => any): number {
+		return this.$once(eventName, fn)
+	}
+
+	/** 别名：off（同 $off） */
+	off(eventName: string, target: number | null = null): void {
+		this.$off(eventName, target)
+	}
+
+	/** 别名：emit（同 $emit） */
+	emit(eventName: string, ...args: any[]): void {
+		this.$emit(eventName, ...args)
+	}
+}
+
+/** 全局总线单例（EventsPlugin 的 EventChannel 底层载体） */
+export const eventBus: UniEventBus = new UniEventBus()

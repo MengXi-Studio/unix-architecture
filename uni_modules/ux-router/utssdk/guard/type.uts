@@ -1,0 +1,83 @@
+/**
+ * 守卫执行结果与守卫管理器类型
+ *
+ * GuardManager 采用 class 实现：非蒸汽（Kotlin/Swift）端不支持「含方法的对象字面量 type」，
+ * 对象字面量会被推断为 UTSJSONObject 导致方法调用失效，故用 class 承载方法。
+ */
+import type { NavigationGuard, PostNavigationGuard, NavigationRedirectMode, RouteConfig, RouteLocation, RouteLocationRaw } from '../types'
+import { RouterErrorCode } from '../enums'
+import { runGuardQueue, runBeforeEnterGuards, runAfterGuards } from './helpers/run'
+
+/** 守卫执行结果类型：next 继续，abort/redirect 结束 */
+export type GuardResultKind = 'next' | 'abort' | 'redirect'
+
+/** 守卫执行结果 */
+export type GuardResult = {
+	kind: GuardResultKind
+	/** 中止时的错误码 */
+	code?: RouterErrorCode
+	/** 重定向目标 */
+	redirect?: RouteLocationRaw
+	/** 重定向导航模式 */
+	mode?: NavigationRedirectMode
+	/** 守卫抛出的异常 */
+	error?: Error
+}
+
+/** 守卫管理器实例 */
+export class GuardManager {
+	private beforeEachGuards: NavigationGuard[] = []
+	private beforeResolveGuards: NavigationGuard[] = []
+	private afterGuards: PostNavigationGuard[] = []
+
+	private register(list: NavigationGuard[], guard: NavigationGuard): () => void {
+		list.push(guard)
+		return () => {
+			const index = list.indexOf(guard)
+			if (index > -1) {
+				list.splice(index, 1)
+			}
+		}
+	}
+
+	/** 注册全局前置守卫，返回取消函数 */
+	beforeEach(guard: NavigationGuard): () => void {
+		return this.register(this.beforeEachGuards, guard)
+	}
+
+	/** 注册全局解析守卫，返回取消函数 */
+	beforeResolve(guard: NavigationGuard): () => void {
+		return this.register(this.beforeResolveGuards, guard)
+	}
+
+	/** 注册全局后置守卫，返回取消函数 */
+	afterEach(guard: PostNavigationGuard): () => void {
+		this.afterGuards.push(guard)
+		return () => {
+			const index = this.afterGuards.indexOf(guard)
+			if (index > -1) {
+				this.afterGuards.splice(index, 1)
+			}
+		}
+	}
+
+	/** 运行全部全局前置守卫，返回首个阻塞结果 */
+	runBeforeEach(to: RouteLocation, from: RouteLocation, timeout: number): Promise<GuardResult> {
+		return runGuardQueue(this.beforeEachGuards, to, from, timeout)
+	}
+
+	/** 运行全部全局解析守卫，返回首个阻塞结果 */
+	runBeforeResolve(to: RouteLocation, from: RouteLocation, timeout: number): Promise<GuardResult> {
+		return runGuardQueue(this.beforeResolveGuards, to, from, timeout)
+	}
+
+	/** 运行全部全局后置守卫（不阻断导航，异常隔离） */
+	runAfter(to: RouteLocation, from: RouteLocation, failure: Error | null = null): void {
+		runAfterGuards(this.afterGuards, to, from, failure)
+	}
+
+	/** 触发路由独享 beforeEnter 守卫 */
+	runBeforeEnter(config: RouteConfig, to: RouteLocation, from: RouteLocation, timeout: number): Promise<GuardResult> {
+		return runBeforeEnterGuards(config, to, from, timeout)
+	}
+}

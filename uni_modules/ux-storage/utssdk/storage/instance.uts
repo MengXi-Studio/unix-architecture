@@ -1,0 +1,77 @@
+/**
+ * 多实例工厂与默认实例装配（对标 unix-request instance.uts / axios.create）
+ *
+ * - defaultCore：默认实例核心（模块级单例，configureStorage 写其 defaults）
+ * - createStorageImpl：创建隔离实例（defaults 独立），返回与默认实例
+ *   同构的 StorageInstance
+ */
+import type { StorageDefaults, StorageInfo, StorageInstance } from '../interface.uts'
+import type { StorageCore } from './types'
+import { setImpl, getImpl, removeImpl, clearImpl, infoImpl, keysImpl, clearExpiredImpl } from './core'
+import { BUILTIN_KEY_PREFIX, BUILTIN_DEFAULT_TTL } from './constants/defaults'
+
+/** 构造内置默认（StorageDefaults 字段全 null 时逐项回退到这里） */
+export function createBuiltinDefaults(): StorageDefaults {
+	const defaults: StorageDefaults = {
+		keyPrefix: BUILTIN_KEY_PREFIX,
+		defaultTTL: BUILTIN_DEFAULT_TTL
+	}
+	return defaults
+}
+
+/** 默认实例核心（模块级单例；入口 API 全部经由它） */
+export const defaultCore: StorageCore = {
+	defaults: createBuiltinDefaults()
+}
+
+/**
+ * 覆盖实例默认配置（configureStorage / instance.setConfig 共用）
+ * @param core 目标实例核心
+ * @param defaults 新默认值（字段为 null 表示沿用内置默认，操作期兜底）
+ */
+export function setCoreDefaults(core: StorageCore, defaults: StorageDefaults): void {
+	core.defaults = defaults
+}
+
+/**
+ * 创建缓存实例（对标 axios.create）
+ * @param defaults 实例默认配置（null 表示全用内置默认）
+ * @returns 实例对象（与默认实例同构）
+ */
+export function createStorageImpl(defaults: StorageDefaults | null): StorageInstance {
+	const core: StorageCore = {
+		defaults: defaults == null ? createBuiltinDefaults() : defaults
+	}
+	return buildStorageInstance(core)
+}
+
+/** 装配实例对象（方法闭包持有各自实例核心，实现多实例隔离） */
+function buildStorageInstance(core: StorageCore): StorageInstance {
+	const instance: StorageInstance = {
+		set: (key: string, data: any | null, ttl: number | null): Promise<void> => {
+			return setImpl(core, key, data, ttl)
+		},
+		get: (key: string): Promise<any | null> => {
+			return getImpl<any>(core, key)
+		},
+		remove: (key: string): Promise<void> => {
+			return removeImpl(core, key)
+		},
+		clear: (): Promise<void> => {
+			return clearImpl(core)
+		},
+		info: (): Promise<StorageInfo> => {
+			return infoImpl(core)
+		},
+		keys: (): Promise<Array<string>> => {
+			return keysImpl(core)
+		},
+		clearExpired: (): Promise<number> => {
+			return clearExpiredImpl(core)
+		},
+		setConfig: (defaults: StorageDefaults): void => {
+			setCoreDefaults(core, defaults)
+		}
+	}
+	return instance
+}

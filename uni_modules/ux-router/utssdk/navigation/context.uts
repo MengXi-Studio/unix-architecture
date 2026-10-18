@@ -1,0 +1,90 @@
+/**
+ * 页面栈上下文工具
+ *
+ * 封装 uni-app x 逻辑层的 getCurrentPages()，读取当前页面信息（当前页 path / query），
+ * 用于路由状态初始化与同步。非 uni 环境（纯 Node 等）下安全回退。
+ */
+
+/** 页面 onLoad 参数对象（任意键值对象；UTS 原生端不支持 index signature，以 any 承载动态键读取） */
+export type UniPageOptions = any
+
+/** 页面实例的等价类型（保留 route 与 options 字段读取） */
+export type UniPageLike = {
+	route: string
+	options: UniPageOptions | null
+}
+
+/**
+ * 获取当前页面栈（存在 uni 环境时）
+ * 返回扁平化页面实例数组，异常或非 uni 环境返回空数组
+ */
+export function getCurrentPagesSafe(): UniPageLike[] {
+	try {
+		const pages = getCurrentPages()
+		return pages as UniPageLike[]
+	} catch (e) {
+		return []
+	}
+}
+
+/** 获取页面栈长度 */
+export function getPageStackLength(): number {
+	return getCurrentPagesSafe().length
+}
+
+/** 获取当前页面路径（带前导斜杠；无页面时返回 '/'） */
+export function getCurrentPagePath(): string {
+	const pages = getCurrentPagesSafe()
+	if (pages.length === 0) {
+		return '/'
+	}
+	return '/' + pages[pages.length - 1].route
+}
+
+/** 获取当前页面 onLoad 接收的 query 参数对象 */
+export function getCurrentPageQuery(): Map<string, string> {
+	const result = new Map<string, string>()
+	const pages = getCurrentPagesSafe()
+	if (pages.length === 0) {
+		return result
+	}
+	const options = pages[pages.length - 1].options
+		if (options !== null) {
+			// UTS 原生端不支持 for..in 与 Object.prototype，改用 UTSJSONObject.keys 遍历（三端 API）
+			const obj = options as UTSJSONObject
+			const keys = UTSJSONObject.keys(obj)
+			for (var i = 0; i < keys.length; i++) {
+				const k = keys[i]
+				result.set(k, obj[k] as string)
+			}
+		}
+	return result
+}
+
+/** 短暂休眠（用于栈顶轮询），毫秒 */
+function sleep(ms: number): Promise<void> {
+	return new Promise<void>(resolve => {
+		setTimeout(() => resolve(), ms)
+	})
+}
+
+/**
+ * 轮询等待指定页面路径成为页面栈顶，用于确认导航目标已真实入栈。
+ * uni api 的 success 仅代表跳转被受理，不代表目标页已入栈；此函数以页面栈为唯一真实来源。
+ * @param targetPath - 目标页规范化路径（如 /pages/index/index）
+ * @param timeout - 总等待时限（毫秒）
+ * @param interval - 轮询间隔（毫秒，默认 50）
+ * @returns 时限内确认到栈顶为 true，否则 false
+ */
+export async function waitForTopPage(targetPath: string, timeout: number, interval: number = 50): Promise<boolean> {
+	const deadline = Date.now() + timeout
+	while (true) {
+		if (getCurrentPagePath() === targetPath) {
+			return true
+		}
+		if (Date.now() >= deadline) {
+			return false
+		}
+		await sleep(interval)
+	}
+}

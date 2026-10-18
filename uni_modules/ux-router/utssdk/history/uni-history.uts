@@ -1,0 +1,62 @@
+/**
+ * uni-app x 页面栈历史适配
+ *
+ * vue-router 依赖 URL/history，而 uni-app x 以原生页面栈（getCurrentPages）为历史。
+ * 本模块将页面栈封装为"当前历史"：支持读取当前页 path/query，并通过匹配器解析为 RouteLocation。
+ * 非 uni 环境安全回退。
+ */
+import type { RouteLocation } from '../types'
+import type { RouteMatcher } from '../matcher/type'
+import { getCurrentPagesSafe } from '../navigation/context'
+
+/** 页面栈顶信息（具名类型，规避 UTS 不允许内联对象字面量类型作为注解） */
+export type CurrentStackInfo = {
+	path: string
+	query: Map<string, string>
+}
+
+export class UniHistory {
+	matcher: RouteMatcher
+
+	constructor(matcher: RouteMatcher) {
+		this.matcher = matcher
+	}
+
+	/** 页面栈顶信息：路径 + 查询参数（具名类型，规避 UTS 不允许内联对象字面量类型） */
+	currentStack(): CurrentStackInfo {
+		const pages = getCurrentPagesSafe()
+		if (pages.length === 0) {
+			return { path: '/', query: new Map() }
+		}
+		const page = pages[pages.length - 1]
+		const path = '/' + page.route
+		const query = new Map<string, string>()
+		const options = page.options
+		if (options !== null) {
+			// UTS 原生端不支持 for..in 与 Object.prototype，改用 UTSJSONObject.keys 遍历（三端 API）
+			const obj = options as UTSJSONObject
+			const keys = UTSJSONObject.keys(obj)
+			for (var i = 0; i < keys.length; i++) {
+				const k = keys[i]
+				query.set(k, obj[k] as string)
+			}
+		}
+		return { path, query }
+	}
+
+	/**
+	 * 将当前页面栈解析为 RouteLocation（经由匹配器补充名称与 meta）
+	 */
+	resolveCurrent(): RouteLocation {
+		const stack = this.currentStack()
+		// 直接以 path?query 字符串形式交由匹配器解析，兼容 __params__ 读取
+		const q = stack.query
+		let full = stack.path
+		let first = true
+		q.forEach((value, key) => {
+			full += (first ? '?' : '&') + key + '=' + encodeURIComponent(value)
+			first = false
+		})
+		return this.matcher.resolve(full)
+	}
+}

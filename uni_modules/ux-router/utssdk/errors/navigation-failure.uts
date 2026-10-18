@@ -1,0 +1,19 @@
+/**
+ * 导航失败错误（继承 RouterError）
+ */
+import { RouterErrorCode } from '../enums'
+import type { RouteLocation } from '../types'
+import { RouterError } from './router-error'
+
+/**
+ * 导航失败错误
+ *
+ * 对应 vue-router 4 的 NavigationFailure，错误码分派到
+ * ABORTED / CANCELLED / DUPLICATED 等枚举，可用 isNavigationFailure 收窄判断。
+ */
+export class NavigationFailure extends RouterError {
+	constructor(code: RouterErrorCode, message: string, to: RouteLocation, from: RouteLocation) {
+		super(code, message, to, from)
+		this.name = 'NavigationFailure'
+	}
+}

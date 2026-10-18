@@ -1,0 +1,14 @@
+/**
+ * Params 存储管理器实现
+ */
+import { ParamsManager } from './type'
+
+export type { ParamsManager } from './type'
+
+/**
+ * 创建 params 管理器
+ * @param defaultPersistent - 全局默认持久化策略
+ */
+export function createParamsManager(defaultPersistent: boolean): ParamsManager {
+	return new ParamsManager(defaultPersistent)
+}

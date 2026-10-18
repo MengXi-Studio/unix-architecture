@@ -1,0 +1,61 @@
+/**
+ * 拦截器注册表（设计 3.4：多枚、有序、可 eject；v1 仅同步）
+ *
+ * 实例隔离：注册表挂在各自 InstanceCore 上（默认实例与 createRequest
+ * 实例互不可见），本模块只提供注册 / 移除操作。链路执行语义在 core.uts
+ * 管线内实现（请求链顺序变换 config；响应链支持恢复 / 换错 / 放行）。
+ */
+import type { RequestConfig, RequestError, ResponseAny } from '../../interface.uts'
+import type { InstanceCore, RequestInterceptorEntry, ResponseInterceptorEntry } from '../types'
+
+/** 自增 id（请求 / 响应共用计数，eject 按全局唯一 id 移除） */
+let nextId = 1
+
+/**
+ * 注册请求拦截器
+ * @param core 目标实例核心
+ * @param onFulfilled 变换 config（同步）
+ * @returns 拦截器 id（供 ejectInterceptor）
+ */
+export function useRequestInterceptorImpl(core: InstanceCore, onFulfilled: (config: RequestConfig) => RequestConfig): number {
+	const id = nextId
+	nextId++
+	const entry: RequestInterceptorEntry = { id: id, onFulfilled: onFulfilled }
+	core.requestInterceptors.push(entry)
+	return id
+}
+
+/**
+ * 注册响应拦截器
+ * @param core 目标实例核心
+ * @param onFulfilled 变换响应（null 表示不处理成功路径）
+ * @param onRejected 错误处理（返回 ResponseResult 恢复 / RequestError 换错 / null 放行；返回类型用 any | null——对象联合在函数类型返回位置被 HBuilderX 转译为 Unit 期望，页面回调 return 值即编译错，M4 云打包实证）
+ * @returns 拦截器 id（供 ejectInterceptor）
+ */
+export function useResponseInterceptorImpl(core: InstanceCore, onFulfilled: ((res: ResponseAny) => ResponseAny) | null, onRejected: ((err: RequestError) => any | null) | null): number {
+	const id = nextId
+	nextId++
+	const entry: ResponseInterceptorEntry = { id: id, onFulfilled: onFulfilled, onRejected: onRejected }
+	core.responseInterceptors.push(entry)
+	return id
+}
+
+/**
+ * 移除拦截器（该实例的请求 / 响应注册表都查找）
+ * @param core 目标实例核心
+ * @param id useXxxInterceptor 返回的 id
+ */
+export function ejectInterceptorImpl(core: InstanceCore, id: number): void {
+	for (let i = 0; i < core.requestInterceptors.length; i++) {
+		if (core.requestInterceptors[i].id == id) {
+			core.requestInterceptors.splice(i, 1)
+			return
+		}
+	}
+	for (let i = 0; i < core.responseInterceptors.length; i++) {
+		if (core.responseInterceptors[i].id == id) {
+			core.responseInterceptors.splice(i, 1)
+			return
+		}
+	}
+}

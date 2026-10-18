@@ -1,0 +1,260 @@
+/**
+ * set / get / remove / clear / info / keys / clearExpired 业务编排
+ *
+ * 管线：normalizeKey（key 校验 + 前缀拼接，ERR_PARAM fail-fast）
+ *   → adapter（原生读写）
+ *   → record / ttl（record 包裹与惰性过期）
+ *
+ * 前缀校验放在操作期（normalizeKey / effectivePrefix）：createStorage /
+ * setConfig 为同步 void 无法 reject，非法前缀实例在全部操作上统一拦截。
+ */
+import type { StorageError, StorageErrorCode, StorageInfo } from '../interface.uts'
+import type { StorageCore, NormalizeKeyResult } from './types'
+import { setStorageRaw, getStorageRaw, removeStorageRaw, removeStorageBatchRaw, getStorageInfoRaw } from './adapter'
+import { buildRecord, detectRecord, isRecordExpired } from './record'
+import { resolveTTL, computeExpire, clearExpiredInKeys } from './ttl'
+import { buildStorageError } from './utils/error'
+import { BUILTIN_KEY_PREFIX, BUILTIN_RESERVED_PREFIX_UNI, BUILTIN_RESERVED_PREFIX_DCLOUD } from './constants/defaults'
+
+/** 写入缓存（record 包裹过期时间戳；失败 reject StorageError） */
+export function setImpl(core: StorageCore, key: string, data: any | null, ttl: number | null): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		const norm = normalizeKey(core, key)
+		const normErr = norm.error
+		if (normErr != null) {
+			reject(normErr)
+			return
+		}
+		const namespacedKey = norm.key
+		if (namespacedKey == null) {
+			reject(buildStorageError('ERR_PARAM', 'key 归一化结果缺失', null, key))
+			return
+		}
+		const defaults = core.defaults
+		const effectiveTTL = resolveTTL(ttl, defaults.defaultTTL)
+		const expire = computeExpire(effectiveTTL)
+		const record = buildRecord(data, expire)
+		setStorageRaw(namespacedKey, record).then((): void => {
+			resolve()
+		}).catch((e: any | null): void => {
+			reject(attachKey(e, key))
+		})
+	})
+}
+
+/** 读取缓存（未命中 / 已过期返回 null，不 reject；非本库格式原样返回） */
+export function getImpl<T>(core: StorageCore, key: string): Promise<T | null> {
+	return new Promise<T | null>((resolve, reject) => {
+		const norm = normalizeKey(core, key)
+		const normErr = norm.error
+		if (normErr != null) {
+			reject(normErr)
+			return
+		}
+		const namespacedKey = norm.key
+		if (namespacedKey == null) {
+			reject(buildStorageError('ERR_PARAM', 'key 归一化结果缺失', null, key))
+			return
+		}
+		getStorageRaw(namespacedKey).then((raw: any | null): void => {
+			if (raw == null) {
+				resolve(null)
+				return
+			}
+			const record = detectRecord(raw)
+			if (record == null) {
+				// 非本库格式（Q5）：按无过期原样返回
+				resolve(raw as T)
+				return
+			}
+			if (isRecordExpired(record)) {
+				// 惰性过期：移除并返回 null（移除失败不阻塞 null 返回）
+				removeStorageRaw(namespacedKey).then((): void => {
+					resolve(null)
+				}).catch((e: any | null): void => {
+					resolve(null)
+				})
+				return
+			}
+			const dataVal = record.data
+			if (dataVal == null) {
+				resolve(null)
+				return
+			}
+			resolve(dataVal as T)
+		}).catch((e: any | null): void => {
+			reject(attachKey(e, key))
+		})
+	})
+}
+
+/** 移除指定缓存 */
+export function removeImpl(core: StorageCore, key: string): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		const norm = normalizeKey(core, key)
+		const normErr = norm.error
+		if (normErr != null) {
+			reject(normErr)
+			return
+		}
+		const namespacedKey = norm.key
+		if (namespacedKey == null) {
+			reject(buildStorageError('ERR_PARAM', 'key 归一化结果缺失', null, key))
+			return
+		}
+		removeStorageRaw(namespacedKey).then((): void => {
+			resolve()
+		}).catch((e: any | null): void => {
+			reject(attachKey(e, key))
+		})
+	})
+}
+
+/** 清理本命名空间全部缓存（按前缀过滤后逐个移除，不触碰其他数据 —— Q4） */
+export function clearImpl(core: StorageCore): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		const prefix = effectivePrefix(core)
+		if (prefix == null) {
+			reject(buildStorageError('ERR_PARAM', 'keyPrefix 禁止使用保留前缀 uni- / dcloud_', null, null))
+			return
+		}
+		const rawInfo = getStorageInfoRaw()
+		if (rawInfo == null) {
+			reject(buildStorageError('ERR_NATIVE', '获取存储信息失败', null, null))
+			return
+		}
+		const namespaced = listNamespacedKeys(prefix, rawInfo.keys)
+		removeStorageBatchRaw(namespaced).then((): void => {
+			resolve()
+		}).catch((e: any | null): void => {
+			reject(e as StorageError)
+		})
+	})
+}
+
+/** 存储信息（uni.getStorageInfo 原样结构，keys 全量不过滤） */
+export function infoImpl(core: StorageCore): Promise<StorageInfo> {
+	return new Promise<StorageInfo>((resolve, reject) => {
+		const rawInfo = getStorageInfoRaw()
+		if (rawInfo == null) {
+			reject(buildStorageError('ERR_NATIVE', '获取存储信息失败', null, null))
+			return
+		}
+		const result: StorageInfo = {
+			keys: rawInfo.keys,
+			currentSize: rawInfo.currentSize,
+			limitSize: rawInfo.limitSize
+		}
+		resolve(result)
+	})
+}
+
+/** 本命名空间 key 列表（剥前缀后返回原始 key） */
+export function keysImpl(core: StorageCore): Promise<Array<string>> {
+	return new Promise<Array<string>>((resolve, reject) => {
+		const prefix = effectivePrefix(core)
+		if (prefix == null) {
+			reject(buildStorageError('ERR_PARAM', 'keyPrefix 禁止使用保留前缀 uni- / dcloud_', null, null))
+			return
+		}
+		const rawInfo = getStorageInfoRaw()
+		if (rawInfo == null) {
+			reject(buildStorageError('ERR_NATIVE', '获取存储信息失败', null, null))
+			return
+		}
+		const namespaced = listNamespacedKeys(prefix, rawInfo.keys)
+		const list: Array<string> = []
+		for (let i = 0; i < namespaced.length; i++) {
+			list.push(namespaced[i].substring(prefix.length))
+		}
+		resolve(list)
+	})
+}
+
+/** 扫描清理本命名空间已过期记录，返回清理条数 */
+export function clearExpiredImpl(core: StorageCore): Promise<number> {
+	return new Promise<number>((resolve, reject) => {
+		const prefix = effectivePrefix(core)
+		if (prefix == null) {
+			reject(buildStorageError('ERR_PARAM', 'keyPrefix 禁止使用保留前缀 uni- / dcloud_', null, null))
+			return
+		}
+		const rawInfo = getStorageInfoRaw()
+		if (rawInfo == null) {
+			reject(buildStorageError('ERR_NATIVE', '获取存储信息失败', null, null))
+			return
+		}
+		const namespaced = listNamespacedKeys(prefix, rawInfo.keys)
+		clearExpiredInKeys(namespaced).then((count: number): void => {
+			resolve(count)
+		}).catch((e: any | null): void => {
+			reject(e as StorageError)
+		})
+	})
+}
+
+/**
+ * key 归一化（ERR_PARAM fail-fast）+ 命名空间前缀拼接
+ * 实际存储 key = keyPrefix + key
+ */
+function normalizeKey(core: StorageCore, key: string): NormalizeKeyResult {
+	if (key.trim().length == 0) {
+		return buildKeyError('ERR_PARAM', 'key 不能为空', key)
+	}
+	const prefix = effectivePrefix(core)
+	if (prefix == null) {
+		return buildKeyError('ERR_PARAM', 'keyPrefix 禁止使用保留前缀 uni- / dcloud_', key)
+	}
+	const okResult: NormalizeKeyResult = { key: prefix + key, error: null }
+	return okResult
+}
+
+/** 实例生效前缀（null 回退内置）；非法保留前缀返回 null */
+function effectivePrefix(core: StorageCore): string | null {
+	const defaults = core.defaults
+	const rawPrefix = defaults.keyPrefix
+	let prefix: string
+	if (rawPrefix == null) {
+		prefix = BUILTIN_KEY_PREFIX
+	} else {
+		prefix = rawPrefix
+	}
+	if (prefix.startsWith(BUILTIN_RESERVED_PREFIX_UNI) || prefix.startsWith(BUILTIN_RESERVED_PREFIX_DCLOUD)) {
+		return null
+	}
+	return prefix
+}
+
+/** 全量 key → 本命名空间 key 列表（含前缀） */
+function listNamespacedKeys(prefix: string, allKeys: Array<string>): Array<string> {
+	const list: Array<string> = []
+	for (let i = 0; i < allKeys.length; i++) {
+		const k = allKeys[i]
+		if (k.startsWith(prefix)) {
+			list.push(k)
+		}
+	}
+	return list
+}
+
+/** 构造 normalize 阶段的 fail-fast 结果（error 挂业务原始 key） */
+function buildKeyError(code: StorageErrorCode, errMsg: string, rawKey: string): NormalizeKeyResult {
+	const result: NormalizeKeyResult = {
+		key: null,
+		error: buildStorageError(code, errMsg, null, rawKey)
+	}
+	return result
+}
+
+/** 将底层错误补挂业务原始 key（adapter 层不感知原始 key；e 实际为 StorageError，null 不会出现） */
+function attachKey(e: any | null, key: string): StorageError {
+	const err = e as StorageError
+	const attached: StorageError = {
+		code: err.code,
+		errSubject: err.errSubject,
+		errMsg: err.errMsg,
+		nativeErrCode: err.nativeErrCode,
+		key: key
+	}
+	return attached
+}

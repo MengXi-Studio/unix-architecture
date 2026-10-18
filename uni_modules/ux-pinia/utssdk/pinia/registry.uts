@@ -1,0 +1,38 @@
+/**
+ * store 注册表：应用级单例存储（实现层）
+ *
+ * - storeMap：id → store 实例（UTS 顶层变量编译为 Kotlin 静态成员，随应用进程存活）
+ * - storeIdMap：store 实例 → id（patch/dispose/getStoreId 反查；对象 key 按引用相等）
+ * - definedIds：已定义 id 集合（defineStore 幂等警告）
+ *
+ * 红线（unix-storage 实战）：实现函数一律 Impl 后缀或与入口函数不同名，
+ * 避免同名 top-level 符号触发 Kotlin 导出符号静默重整（__1）。
+ *
+ * Kotlin 泛型擦除红线（error17）：泛型 T 进出 Map<string, any> 必须显式 as any。
+ */
+export const storeMap: Map<string, any> = new Map<string, any>()
+export const storeIdMap: Map<any, string> = new Map<any, string>()
+export const definedIds: Set<string> = new Set<string>()
+
+/** 按 id 取实例；不存在返回 null */
+export function getStoreById(id: string): any | null {
+	const v: any | null = storeMap.get(id)
+	return v
+}
+
+/** 登记实例（幂等由 defineStore 层保证） */
+export function setStore(id: string, instance: any): void {
+	storeMap.set(id, instance)
+	storeIdMap.set(instance, id)
+}
+
+/** 注销实例（dispose）；已定义 id 保留，使后续 useStore 重新执行 setup 重建 */
+export function removeStore(instance: any): boolean {
+	const id: string | null = storeIdMap.get(instance)
+	if (id == null) {
+		return false
+	}
+	storeMap.delete(id)
+	storeIdMap.delete(instance)
+	return true
+}

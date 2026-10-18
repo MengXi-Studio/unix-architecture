@@ -1,0 +1,52 @@
+/**
+ * uni 原生导航 API 拦截插件（入口）
+ *
+ * 通过 `uni.addInterceptor` 拦截外部直接调用 uni 导航 API，转交路由器执行守卫链。
+ * 以路由器插件形式提供，注册方式：
+ *
+ * ```ts
+ * import { createRouter, InterceptorPlugin } from '@meng-xi/unix-router'
+ * const router = createRouter({ routes, plugins: [new InterceptorPlugin()], interceptUniApi: true })
+ * ```
+ *
+ * class 实现：非蒸汽（Kotlin/Swift）端对象字面量含方法会被推断为 UTSJSONObject。
+ */
+import type { PluginContext, RouterOptions, Router } from '../../types'
+import { RouterPlugin } from '../../types'
+import { installInterceptors, removeInterceptors } from './install'
+
+export { installInterceptors, removeInterceptors, markRouterCall } from './install'
+
+/**
+ * InterceptorPlugin - uni 原生导航 API 拦截器插件
+ *
+ * 拦截 navigateTo / redirectTo / switchTab / reLaunch / navigateBack，
+ * 将外部直接调用转交路由器实例，确保路由守卫始终生效。
+ * 依赖 `RouterOptions.interceptUniApi` 选项（默认 false）。
+ */
+export class InterceptorPlugin extends RouterPlugin {
+	constructor() {
+		super()
+		this.name = 'interceptor'
+	}
+
+	override install(context: PluginContext, options: RouterOptions): void {
+		const interceptUniApi = options.interceptUniApi === true
+		if (!interceptUniApi) {
+			return
+		}
+
+		// 安装拦截器（立即注册 uni.addInterceptor，未在 app.use 时才延迟）
+		installInterceptors(context.router as Router)
+
+		// app 安装时注册卸载清理（HMR / 重载场景，仅浏览器端适用）
+		context.onAppInstall(app => {
+			// #ifdef WEB
+			const un = (app as any).onUnmount
+			if (typeof un === 'function') {
+				un(() => removeInterceptors())
+			}
+			// #endif
+		})
+	}
+}

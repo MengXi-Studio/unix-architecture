@@ -1,0 +1,21 @@
+/**
+ * isNavigationFailure：判断错误是否为指定类型的导航失败
+ */
+import { RouterErrorCode } from '../enums'
+import { NavigationFailure } from './navigation-failure'
+
+/**
+ * 判断某个错误是否为指定类型/错误码的导航失败
+ * @param error - 待判断的错误对象；Promise.catch 回调参数为 any | null，直接传入即可
+ * @param type - 可选错误码；传 null 时只要是 NavigationFailure 即返回 true
+ * @returns 是否为匹配的导航失败
+ */
+export function isNavigationFailure(error: any | null, type: RouterErrorCode | null = null): boolean {
+	if (!(error instanceof NavigationFailure)) {
+		return false
+	}
+	if (type === null) {
+		return true
+	}
+	return (error as NavigationFailure).code === type
+}

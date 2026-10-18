@@ -1,0 +1,87 @@
+/**
+ * StorageRecord 包裹 / 探测 / 过期判断（本库写入格式层）
+ */
+import type { StorageRecord } from './types'
+
+/** 构造 record（仅 set 路径写入） */
+export function buildRecord(data: any | null, expire: number | null): StorageRecord {
+	const record: StorageRecord = {
+		data: data,
+		expire: expire
+	}
+	return record
+}
+
+/**
+ * 探测原始值是否为本库 record 格式（Q5：非本库格式原样返回，按无过期处理）
+ *
+ * 标记特征：对象且同时含 data / expire 字段，且 expire 为 number | null
+ * （本库 set 写入的 record 恒含两字段）。判别用 try-cast 探活
+ * （unix-request isRequestErrorValue 同款）：Kotlin 端非对象强转抛
+ * ClassCastException，web 端 as 擦除后由字段探测兜底（字符串 / 数组 /
+ * 基础类型的 keys 探测不含 data+expire，天然排除）。
+ *
+ * @returns 非 record 格式返回 null
+ */
+export function detectRecord(raw: any | null): StorageRecord | null {
+	if (raw == null) {
+		return null
+	}
+	let obj: UTSJSONObject | null = null
+	let objKeys: Array<string> | null = null
+	try {
+		const candidate = raw as UTSJSONObject
+		const candidateKeys = UTSJSONObject.keys(candidate)
+		if (candidateKeys.length > 0) {
+			obj = candidate
+			objKeys = candidateKeys
+		}
+	} catch (e) {
+		obj = null
+		objKeys = null
+	}
+	if (obj == null || objKeys == null) {
+		return null
+	}
+	let hasData = false
+	let hasExpire = false
+	for (let i = 0; i < objKeys.length; i++) {
+		const k = objKeys[i]
+		if (k == 'data') {
+			hasData = true
+		} else if (k == 'expire') {
+			hasExpire = true
+		}
+	}
+	if (!hasData || !hasExpire) {
+		return null
+	}
+	const expireVal = obj['expire']
+	let expire: number | null = null
+	if (expireVal != null) {
+		let expireOk = false
+		try {
+			expire = expireVal as number
+			expireOk = true
+		} catch (e) {
+			expireOk = false
+		}
+		if (!expireOk) {
+			return null
+		}
+	}
+	const record: StorageRecord = {
+		data: obj['data'],
+		expire: expire
+	}
+	return record
+}
+
+/** 惰性过期判断（Date.now() 严格大于 expire 即过期；expire null = 永不过期） */
+export function isRecordExpired(record: StorageRecord): boolean {
+	const expire = record.expire
+	if (expire == null) {
+		return false
+	}
+	return Date.now() > expire
+}

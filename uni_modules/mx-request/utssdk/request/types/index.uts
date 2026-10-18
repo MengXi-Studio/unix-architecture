@@ -1,0 +1,48 @@
+/**
+ * request 内部类型（不含对外类型转发）
+ *
+ * 注意：对外类型（RequestConfig / RequestError 等）实现层直接从
+ * '../../interface.uts' 引用（唯一定义源，无双重定义漂移）。
+ * 目录入口文件不写跨级相对路径的 re-export（编译器对 index.uts 内部
+ * 跨级 export...from 解析异常，unix-utils v0.8 同款教训：桶只引同目录）；
+ * 跨级 import type 已由 spike 验证可行（interceptors/index.uts 同款）。
+ */
+import type { RequestConfig, RequestDefaults, RequestError, ResponseAny } from '../../interface.uts'
+
+/** 请求拦截器注册项（内部；按注册顺序执行） */
+export type RequestInterceptorEntry = {
+	id: number
+	onFulfilled: (config: RequestConfig) => RequestConfig
+}
+
+/** 响应拦截器注册项（内部；按注册顺序执行，onRejected 可恢复 / 换错 / 放行） */
+export type ResponseInterceptorEntry = {
+	id: number
+	onFulfilled: ((res: ResponseAny) => ResponseAny) | null
+	onRejected: ((err: RequestError) => any | null) | null
+}
+
+/**
+ * 实例核心（默认实例与 createRequest 实例同构；拦截器与 defaults 全隔离）
+ */
+export type InstanceCore = {
+	/** 实例默认配置（normalize 三级合并的中间层） */
+	defaults: RequestDefaults
+	/** 请求拦截器注册表（按注册顺序） */
+	requestInterceptors: Array<RequestInterceptorEntry>
+	/** 响应拦截器注册表（按注册顺序） */
+	responseInterceptors: Array<ResponseInterceptorEntry>
+}
+
+/** 归一化结果（normalize fail-fast 时 config 为 null、error 携带 ERR_PARAM / ERR_CONFIG） */
+export type NormalizeResult = {
+	config: RequestConfig | null
+	error: RequestError | null
+}
+
+/** 响应拦截器链执行结果（终态：ok 为 true 时 res 有效，否则 err 有效） */
+export type ChainOutcome = {
+	ok: boolean
+	res: ResponseAny | null
+	err: RequestError | null
+}

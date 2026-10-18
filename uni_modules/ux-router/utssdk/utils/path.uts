@@ -1,0 +1,117 @@
+/**
+ * 路径工具（uni-app x 页面路径处理）
+ */
+
+/**
+ * 规范化页面路径：统一补前导斜杠、去尾部斜杠
+ * @param path - 原始路径
+ * @returns 规范化路径（如 /pages/index/index）
+ */
+export function normalizePath(path: string): string {
+	let p = path
+	if (p.length > 0 && p.charCodeAt(0) !== 47 /* '/' */) {
+		p = '/' + p
+	}
+	// 去除末尾连续的斜杠（保留根路径恰为一个斜杠）
+	while (p.length > 1 && p.charAt(p.length - 1) === '/') {
+		p = p.substring(0, p.length - 1)
+	}
+	return p
+}
+
+/**
+ * 解析完整 URL 为「路径 + 查询」，返回结构体
+ */
+export class ParsedUrl {
+	path: string = ''
+	query: Map<string, string> = new Map()
+}
+
+/**
+ * 解析查询字符串为键值 Map（支持重复 key，后者覆盖前者）
+ * @param queryString - 形如 a=1&b=2 的查询串（可含前导 ?）
+ * @returns 查询键值 Map
+ */
+export function parseQuery(queryString: string): Map<string, string> {
+	const result = new Map<string, string>()
+	let raw = queryString
+	if (raw.length > 0 && raw.charAt(0) === '?') {
+		raw = raw.substring(1)
+	}
+	if (raw.length === 0) {
+		return result
+	}
+	const pairs = raw.split('&')
+	for (var i = 0; i < pairs.length; i++) {
+		const pair = pairs[i]
+		if (pair.length === 0) {
+			continue
+		}
+		const eqIndex = pair.indexOf('=')
+		if (eqIndex === -1) {
+			result.set(decodeURIComponentSafe(pair), '')
+		} else {
+			const key = decodeURIComponentSafe(pair.substring(0, eqIndex))
+			const value = decodeURIComponentSafe(pair.substring(eqIndex + 1))
+			result.set(key, value)
+		}
+	}
+	return result
+}
+
+/**
+ * 序列化查询 Map 为查询字符串（不含前导 ?）
+ * @param query - 查询键值 Map
+ * @returns 形如 a=1&b=2 的查询串；空查询返回空串
+ */
+export function serializeQuery(query: Map<string, string>): string {
+	const parts: string[] = []
+	query.forEach((value, key) => {
+		parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(value))
+	})
+	return parts.join('&')
+}
+
+/**
+ * 拼接完整路径：path + 序列化后的查询
+ * @param path - 规范化路径
+ * @param query - 查询键值 Map
+ * @returns 形如 /pages/a?a=1 的完整路径
+ */
+export function buildFullPath(path: string, query: Map<string, string>): string {
+	if (query.size === 0) {
+		return path
+	}
+	return path + '?' + serializeQuery(query)
+}
+
+/**
+ * 拆分完整 URL 为路径与查询
+ * @param full - 形如 /pages/a?a=1 的完整路径
+ * @returns 拆分结果
+ */
+export function parseUrl(full: string): ParsedUrl {
+	const result = new ParsedUrl()
+	const qIndex = full.indexOf('?')
+	if (qIndex === -1) {
+		result.path = full
+		return result
+	}
+	result.path = full.substring(0, qIndex)
+	result.query = parseQuery(full.substring(qIndex + 1))
+	return result
+}
+
+/**
+ * 安全 decodeURIComponent，解码失败或返回空时原样返回
+ * @param value - 待解码字符串
+ * @returns 解码结果
+ */
+export function decodeURIComponentSafe(value: string): string {
+	try {
+		const decoded = decodeURIComponent(value)
+		return decoded != null ? decoded : value
+	} catch (e) {
+		return value
+	}
+}

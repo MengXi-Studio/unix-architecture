@@ -1,0 +1,4 @@
+/**
+ * 路由器内部辅助类型
+ */
+export type NavigationMode = 'push' | 'replace' | 'relaunch'

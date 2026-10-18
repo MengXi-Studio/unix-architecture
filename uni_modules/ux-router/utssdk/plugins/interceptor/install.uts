@@ -1,0 +1,209 @@
+/**
+ * uni 原生导航 API 拦截器实现
+ *
+ * 通过 `uni.addInterceptor` 拦截外部直接调用 `uni.navigateTo / redirectTo / switchTab / reLaunch / navigateBack`，
+ * 将其转交由路由器实例执行完整守卫链，避免路由守卫被绕过。
+ *
+ * 关键机制 —— 区分「路由器发起的调用」与「外部直接调用」：
+ * - 路由器自身调用 uni API 前会调用 `markRouterCall()` 标记；拦截器检测到此标记则放行，避免二次拦截。
+ * - 外部直接调用：转交路由器处理，并返回 `false` 阻止原始调用；
+ *   同时清空 `url` 作为双保险（极少数基础库会忽略 `invoke` 返回的 `false`）。
+ *
+ * 平台说明：uni-app x 各端（Web / 小程序 / App / HarmonyOS）按 HBuilderX 版本支持 `addInterceptor`。
+ * 运行时能力缺失时自动降级并输出警告，不阻塞导航。
+ */
+import type { Router } from '../../types'
+import { getPlatform } from '../../utils'
+import { parseUrl } from '../../utils'
+import { warn } from '../../utils'
+import { INTERCEPTED_APIS } from '../../constants/interceptor'
+
+/**
+ * 拦截器内部状态：区分「路由器发起」与「外部调用」
+ *
+ * 使用计数器而非布尔值，避免并发导航时标记被错误消费。
+ */
+class InterceptorManager {
+	/** 路由器发起的调用计数 */
+	private routerCallCount: number = 0
+	/** 路由器实例引用 */
+	private router: Router | null = null
+
+	/** 标记下一次 uni API 调用由路由器内部发起 */
+	mark(): void {
+		this.routerCallCount++
+	}
+
+	/** 检查当前调用是否由路由器发起，并消费一次计数；是则返回 true（放行） */
+	isRouterCall(): boolean {
+		if (this.routerCallCount > 0) {
+			this.routerCallCount--
+			return true
+		}
+		return false
+	}
+
+	/** 获取路由器实例 */
+	getRouter(): Router | null {
+		return this.router
+	}
+
+	/** 绑定路由器实例 */
+	setRouter(router: Router): void {
+		this.router = router
+	}
+
+	/** 重置全部状态 */
+	reset(): void {
+		this.router = null
+		this.routerCallCount = 0
+	}
+}
+
+/** 全局活跃拦截器管理器（同一时刻仅支持一个实例） */
+let activeManager: InterceptorManager | null = null
+
+/**
+ * 标记下一次 uni API 调用由路由器内部发起（供导航模块在调用 uni API 前调用）
+ * 未安装拦截器时为安全空操作。
+ */
+export function markRouterCall(): void {
+	const active = activeManager
+	if (active !== null) {
+		active.mark()
+	}
+}
+
+/**
+ * 按 api 类型将外部 uni 导航调用转发到路由器实例
+ * @param api - 被拦截的 uni API 名称
+ * @param url - uni API 的 url 参数（navigateBack 可能为空）
+ * @param delta - navigateBack 的返回层级
+ */
+function dispatch(api: string, url: string | null, delta: number | null): void {
+	const active = activeManager
+	if (active === null) {
+		return
+	}
+	const router = active.getRouter()
+	if (router === null) {
+		return
+	}
+
+	if (api === 'navigateBack') {
+		void router.back(delta !== null && delta > 0 ? delta : 1)
+		return
+	}
+	if (api === 'switchTab') {
+		// switchTab 不支持 query；路由器按目标 meta.isTab 自动分发给 uni.switchTab
+		const safeUrl = url === null ? '' : url
+		const parsed = parseUrl(safeUrl)
+		if (parsed.path.length > 1) {
+			void router.push(parsed.path)
+		}
+		return
+	}
+
+	const safeUrl = url === null ? '' : url
+	const parsed = parseUrl(safeUrl)
+	if (parsed.path.length <= 1) {
+		return // 无可跳转的有效页面路径
+	}
+	const q = parsed.query
+	const hasQuery = q.size > 0
+	if (api === 'navigateTo') {
+		if (hasQuery) void router.push({ path: parsed.path, query: q })
+		else void router.push(parsed.path)
+	} else if (api === 'redirectTo') {
+		if (hasQuery) void router.replace({ path: parsed.path, query: q })
+		else void router.replace(parsed.path)
+	} else if (api === 'reLaunch') {
+		if (hasQuery) void router.relaunch({ path: parsed.path, query: q })
+		else void router.relaunch(parsed.path)
+	}
+}
+
+/**
+ * 构建单个导航 API 的拦截器并将其注册到 uni
+ * @param api - 需拦截的 uni API 名称
+ * @param interceptor - 拦截器对象（具名类型化）
+ */
+function installApi(api: string, interceptor: AddInterceptorOptions): void {
+	uni.addInterceptor(api, interceptor)
+}
+
+/**
+ * 安装 uni 原生导航 API 拦截器
+ * @param router - 路由器实例
+ */
+export function installInterceptors(router: Router): void {
+	if (typeof uni.addInterceptor !== 'function') {
+		warn('uni.addInterceptor 不可用（HBuilderX 版本不足或平台未实现），原生导航拦截已禁用')
+		return
+	}
+	if (activeManager !== null) {
+		warn('已有其他路由器实例注册了拦截器，将被新的实例替换（同一时刻仅支持一个）')
+		removeInterceptors()
+	}
+	const manager = new InterceptorManager()
+	activeManager = manager
+	manager.setRouter(router)
+
+	// Web 端 switchTab 需要差异化处理（阻止会导致 TabBar 组件状态卡死）
+	const isWeb = getPlatform().isH5
+	for (var i = 0; i < INTERCEPTED_APIS.length; i++) {
+		const api = INTERCEPTED_APIS[i]
+		const interceptor: AddInterceptorOptions = {
+			invoke(args: Record<string, any>): boolean | void {
+				// uni.* 拦截参数在原生端为 UTSJSONObject，统一按索引读取/写入
+				const argObj = args as UTSJSONObject
+				// 放行路由器自身发起的调用（守卫已由路由器执行，避免二次拦截）
+				const active = activeManager
+				if (active !== null && active.isRouterCall()) {
+					return true
+				}
+				// Web 端 switchTab：放行原始调用并在成功回调中同步路由状态（避免 TabBar 组件状态卡死）
+				if (api === 'switchTab' && isWeb) {
+					if (active !== null) {
+						const r = active.getRouter()
+						if (r !== null) {
+							const originalSuccess = argObj['success']
+							argObj['success'] = (res: any): void => {
+								r.syncRoute()
+								if (originalSuccess !== null && typeof originalSuccess === 'function') {
+									;(originalSuccess as (res: any) => void)(res)
+								}
+							}
+						}
+					}
+					return true
+				}
+				// 外部直接调用：转交路由器处理并阻止原始调用
+				const urlV = argObj['url']
+				const deltaV = argObj['delta']
+				dispatch(api, urlV === null ? null : urlV as string, deltaV === null ? null : deltaV as number)
+				if (argObj['url'] !== null) {
+					argObj['url'] = ''
+				}
+				return false
+			}
+		}
+		installApi(api, interceptor)
+	}
+}
+
+/**
+ * 移除 uni 原生导航 API 拦截器并释放路由器引用
+ */
+export function removeInterceptors(): void {
+	if (typeof uni.removeInterceptor === 'function') {
+		for (var i = 0; i < INTERCEPTED_APIS.length; i++) {
+			uni.removeInterceptor(INTERCEPTED_APIS[i])
+		}
+	}
+	const active = activeManager
+	if (active !== null) {
+		active.reset()
+	}
+	activeManager = null
+}

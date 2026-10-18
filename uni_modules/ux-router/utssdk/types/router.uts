@@ -1,0 +1,98 @@
+/**
+ * 路由器类型定义（Router 接口与 RouterOptions）
+ */
+import type { App } from 'vue'
+import type { RouteConfig, RouteLocation, RouteLocationRaw, NavigationResult, NavigationAnimation } from './route'
+import type { NavigationGuard, PostNavigationGuard } from './guard'
+import type { RouterPlugin } from './plugin'
+
+/** 路由错误处理回调 */
+export type RouterOnError = (error: Error, to: RouteLocation, from: RouteLocation) => void
+
+/** guardRoute 方法的选项 */
+export type GuardRouteOptions = {
+	/** 守卫中止时的回调（冷启动场景页面已加载，无法真正阻止，可在此跳转到安全页） */
+	onAbort?: (failure: Error) => void
+}
+
+/** 路由器初始化选项 */
+export type RouterOptions = {
+	/** 路由配置列表，须与 pages.json 中的页面声明保持一致 */
+	routes: RouteConfig[]
+	/** 是否启用严格模式，启用后未匹配的命名路由将抛出异常（默认 true） */
+	strict?: boolean
+	/** 守卫超时时间（毫秒），默认 10000，设为 0 禁用 */
+	guardTimeout?: number
+	/** 路由器就绪超时（毫秒），默认 0 永不超时 */
+	readyTimeout?: number
+	/** 是否开启 uni 原生导航 API 拦截（将外部 uni.navigateTo 等转交路由器执行守卫）
+	 * 依赖运行平台支持 uni.addInterceptor（Web 4.0 / 微信 4.41 / Android 3.97 / iOS 4.11 / HarmonyOS 4.61 起），
+	 * 运行时缺失该能力时自动降级并警告；默认 false */
+	interceptUniApi?: boolean
+	/** 插件列表（可选，按需注册扩展能力；须同时注册对应选项，如 [InterceptorPlugin]） */
+	plugins?: RouterPlugin[]
+	/** 是否默认持久化 params 到 storage（须配合 ParamsPlugin，默认 false） */
+	paramsPersistent?: boolean
+	/**
+	 * 全局默认导航动画（配合 AnimationPlugin，须注册 plugins: [AnimationPlugin] 才生效）。
+	 * App/小程序 透传原生 animationType；H5 端由插件以 CSS 动画实现。
+	 */
+	animation?: NavigationAnimation
+}
+
+/**
+ * 路由器实例接口
+ * 提供 vue-router 风格的路由导航、守卫注册与状态查询能力（适配 uni-app x）
+ */
+export interface Router {
+	/** 当前路由位置 */
+	readonly currentRoute: RouteLocation
+
+	/** 导航到新页面（对应 uni.navigateTo / uni.switchTab），返回目标路由位置 */
+	push(location: RouteLocationRaw): Promise<NavigationResult>
+
+	/** 替换当前页面（对应 uni.redirectTo / uni.switchTab） */
+	replace(location: RouteLocationRaw): Promise<NavigationResult>
+
+	/** 关闭所有页面并打开目标页面（对应 uni.reLaunch / uni.switchTab） */
+	relaunch(location: RouteLocationRaw): Promise<NavigationResult>
+
+	/** 返回上一页或多级页面（对应 uni.navigateBack）；delta 需为正整数 */
+	back(delta?: number | null): Promise<NavigationResult>
+
+	/** 注册全局前置守卫，返回取消注册函数 */
+	beforeEach(guard: NavigationGuard): () => void
+
+	/** 注册全局解析守卫，返回取消注册函数 */
+	beforeResolve(guard: NavigationGuard): () => void
+
+	/** 注册全局后置守卫，返回取消注册函数 */
+	afterEach(guard: PostNavigationGuard): () => void
+
+	/** 获取所有已注册的路由配置 */
+	getRoutes(): RouteConfig[]
+
+	/** 检查是否存在指定名称的路由 */
+	hasRoute(name: string): boolean
+
+	/** 解析路由位置为完整 RouteLocation，不执行导航 */
+	resolve(location: RouteLocationRaw): RouteLocation
+
+	/** 等待路由器初始化完成 */
+	isReady(): Promise<void>
+
+	/** 注册路由错误处理回调 */
+	onError(handler: RouterOnError): () => void
+
+	/** 注册路由变化监听器（导航完成或状态同步时触发） */
+	onRouteChange(listener: (to: RouteLocation, from: RouteLocation) => void): () => void
+
+	/** 同步路由状态与实际页面栈（建议在页面 onShow 调用） */
+	syncRoute(): void
+
+	/** 对指定路由补执行守卫链（冷启动场景），不执行实际导航 */
+	guardRoute(location?: RouteLocationRaw, options?: GuardRouteOptions): Promise<RouteLocation>
+
+	/** 安装路由器到 Vue 应用实例 */
+	install(app: any): void
+}

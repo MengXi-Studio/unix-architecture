@@ -1,0 +1,169 @@
+// #ifdef WEB
+/**
+ * H5 页面过渡动画（Web Animations API 实现）
+ *
+ * 不使用 CSS @keyframes（项目 CSS 规则禁用），改用 element.animate()（WAAPI）：
+ * - 进入动画：push / replace / relaunch 完成后，对页面根元素播放进入关键帧
+ * - 退出动画：back 前播放退出关键帧并等待（animation.finished）完成后再真正返回
+ *
+ * 关键帧命名与 App 端 animationType 对齐（slide-in-right / fade-in / pop-in 等）。
+ */
+import type { NavigationAnimation } from '../../types'
+import { normalizeAnimation } from './types'
+
+/** H5 页面根元素选择器（uni-app x H5 将每个页面渲染为独立容器，栈顶即当前页） */
+const PAGE_SELECTOR: string = 'uni-page'
+
+/** 动画关键帧对象（Web Animations API 使用的局部类型，避免依赖 DOM 全局类型） */
+type AnimKeyframe = {
+	transform?: string
+	opacity?: string
+}
+
+/** 进入动画关键帧（与 App 端动画类型命名对齐） */
+const ENTER_KEYFRAMES: Record<string, AnimKeyframe[]> = {
+	'slide-in-right': [{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }],
+	'slide-in-left': [{ transform: 'translateX(-100%)' }, { transform: 'translateX(0)' }],
+	'slide-in-top': [{ transform: 'translateY(-100%)' }, { transform: 'translateY(0)' }],
+	'slide-in-bottom': [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }],
+	'fade-in': [{ opacity: '0' }, { opacity: '1' }],
+	'zoom-in': [{ transform: 'scale(0.8)' }, { transform: 'scale(1)' }],
+	'zoom-fade-in': [{ opacity: '0', transform: 'scale(0.8)' }, { opacity: '1', transform: 'scale(1)' }],
+	'pop-in': [{ transform: 'scale(0.8)' }, { transform: 'scale(1)' }]
+}
+
+/** 退出动画关键帧（back） */
+const EXIT_KEYFRAMES: Record<string, AnimKeyframe[]> = {
+	'slide-out-right': [{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }],
+	'slide-out-left': [{ transform: 'translateX(0)' }, { transform: 'translateX(-100%)' }],
+	'slide-out-top': [{ transform: 'translateY(0)' }, { transform: 'translateY(-100%)' }],
+	'slide-out-bottom': [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }],
+	'fade-out': [{ opacity: '1' }, { opacity: '0' }],
+	'zoom-out': [{ transform: 'scale(1)' }, { transform: 'scale(1.2)' }],
+	'zoom-fade-out': [{ opacity: '1', transform: 'scale(1)' }, { opacity: '0', transform: 'scale(1.2)' }],
+	'pop-out': [{ transform: 'scale(1)' }, { transform: 'scale(1.2)' }]
+}
+
+/**
+ * 获取页面栈顶元素（当前页容器）；非浏览器环境返回 null
+ * 注：返回类型用 any —— uni-app x 的 UniElement 类型缺少 Web DOM 属性（textContent 等），
+ * 但 H5 运行时元素为真实 DOM 节点，此类属性可安全访问。
+ */
+function getTopPageElement(): any {
+	if (typeof document === 'undefined') {
+		return null
+	}
+	const pages = document.querySelectorAll(PAGE_SELECTOR)
+	if (pages.length === 0) {
+		return null
+	}
+	return pages[pages.length - 1]
+}
+
+/** 是否为 H5 / Web 平台（运行时判断，配合调用方 getPlatform） */
+
+/**
+ * 同步应用起始关键帧样式（进入动画的起点占位）
+ * 使新页在渲染首帧就位于动画起点（如屏幕外），避免「内容原位闪现后再滑入」的割裂感。
+ */
+function applyStartStyle(el: any, frame: AnimKeyframe): void {
+	if (frame.transform !== null && frame.transform !== undefined) {
+		el.style.transform = frame.transform
+	}
+	if (frame.opacity !== null && frame.opacity !== undefined) {
+		el.style.opacity = frame.opacity
+	}
+}
+
+/** 清理进入动画的起点占位样式 */
+function clearStartStyle(el: any): void {
+	el.style.transform = ''
+	el.style.opacity = ''
+}
+
+/**
+ * 播放进入动画（push / replace / relaunch，H5 端）
+ *
+ * 时序处理：
+ * 1. 同步应用起点关键帧样式并强制 reflow —— uni-app x H5 在导航完成回调时新页内容
+ *    已替换进 uni-page（data-page 已切换），此时若等动画首帧才跳到起点，会出现
+ *    「内容原位闪现 1-2 帧 → 再跳到屏幕外滑入」的割裂感（观感卡顿）；
+ * 2. requestAnimationFrame 延后一帧播放动画：动画与页面渲染并发进行，首次进入
+ *    未编译页时页面在滑入期间逐渐渲染，不等渲染完成再播，避免二次割裂；
+ * 3. 动画结束后清理起点占位样式（fill: both 保留终态，残留内联 transform 会影响
+ *    back 退出动画的起始帧）。
+ */
+export function animatePageEnter(animation: NavigationAnimation): boolean {
+	if (typeof document === 'undefined') {
+		return false
+	}
+	const el = getTopPageElement()
+	if (el === null) {
+		return false
+	}
+	const keyframes = ENTER_KEYFRAMES[animation.type]
+	if (keyframes === null || keyframes === undefined) {
+		return false
+	}
+	const anim = normalizeAnimation(animation)
+	const duration: number = anim.duration === null || anim.duration === undefined ? 300 : anim.duration
+	// 1. 同步应用起点样式（当前渲染帧内生效），强制 reflow 确保布局立即更新
+	applyStartStyle(el, keyframes[0])
+	try {
+		// 读取布局属性强制同步回流（reflow）
+		void el.offsetWidth
+	} catch (e) {
+		void e
+	}
+	// 2. 延后一帧播放动画
+	requestAnimationFrame(() => {
+		try {
+			const player: any = el.animate(keyframes, { duration, easing: 'ease', fill: 'both' })
+			void player
+			console.log('[unix-router] H5 进入动画播放 ->', animation.type, duration + 'ms')
+		} catch (e) {
+			// 动画不可用（如环境不支持 WAAPI）时静默降级，并回滚起点占位样式
+			void e
+			clearStartStyle(el)
+		}
+		// 3. 动画结束后清理起点占位样式
+		setTimeout(() => {
+			clearStartStyle(el)
+		}, duration + 50)
+	})
+	return true
+}
+
+/**
+ * 播放退出动画并等待完成（back，H5 端）
+ * 在真正 navigateBack 前调用，使当前页滑出后再执行返回。
+ * @param animation - 动画配置
+ * @returns 动画播放完成（或无法播放时立即 resolve）
+ */
+export async function animatePageExit(animation: NavigationAnimation): Promise<void> {
+	if (typeof document === 'undefined') {
+		return
+	}
+	const el = getTopPageElement()
+	if (el === null) {
+		return
+	}
+	const keyframes = EXIT_KEYFRAMES[animation.type]
+	if (keyframes === null || keyframes === undefined) {
+		return
+	}
+	const anim = normalizeAnimation(animation)
+	const duration: number = anim.duration === null || anim.duration === undefined ? 300 : anim.duration
+	try {
+		const player: any = el.animate(keyframes, { duration, easing: 'ease', fill: 'both' })
+		void player
+		console.log('[unix-router] H5 退出动画播放 ->', animation.type, duration + 'ms')
+	} catch (e) {
+		void e
+	}
+	// 不依赖返回的 Animation 实例（uni-app x 类型未暴露 finished），按时长等待退出动画播完
+	await new Promise<void>(resolve => {
+		setTimeout(() => resolve(), duration + 50)
+	})
+}
+// #endif

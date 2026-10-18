@@ -1,0 +1,26 @@
+/**
+ * 路由错误码枚举
+ *
+ * 数值对齐 vue-router 4 的 NavigationFailureType：
+ * - ABORTED（导航被守卫中止，返回 false）
+ * - CANCELLED（守卫抛错 / 重定向超过深度上限）
+ * - DUPLICATED（重复导航到当前地址）
+ *
+ * 另补充 uni-app x 平台相关错误码：ROUTE_NOT_FOUND、NAVIGATION_API_ERROR、SETUP_ERROR。
+ */
+export enum RouterErrorCode {
+	/** 导航被守卫中止（返回 false 或重定向异常） */
+	ABORTED = 4,
+	/** 守卫抛出异常或重定向超过最大深度 */
+	CANCELLED = 8,
+	/** 重复导航到当前路由 */
+	DUPLICATED = 16,
+	/** 未匹配到页面路由（uni-app x 扩展） */
+	ROUTE_NOT_FOUND = 32,
+	/** uni.* 原生导航 API 调用失败（uni-app x 扩展） */
+	NAVIGATION_API_ERROR = 64,
+	/** 路由安装环境错误（uni-app x 扩展） */
+	SETUP_ERROR = 128,
+	/** 使用了插件功能但未注册对应插件（如 params 未注册 ParamsPlugin） */
+	PLUGIN_REQUIRED = 256
+}

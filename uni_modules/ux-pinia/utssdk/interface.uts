@@ -1,0 +1,38 @@
+/**
+ * unix-pinia 对外类型声明（interface.uts，官方必需，对齐 unix-storage 架构）
+ *
+ * 「声明和实现」分层（官方 UTS 插件架构）：
+ * - 本文件内联声明全部对外类型，供 uts-proxy V1 生成参数编码与
+ *   HBuilderX 语法提示（parseInterfaceTypes 仅解析本文件的内联声明）
+ * - 对外 API 在入口 index.uts 内联声明（V1 代理只解析平台入口的
+ *   内联 export function / export const，re-export 链不可见）
+ */
+
+/** Pinia 实例类型（class 定义在 pinia/pinia.uts，此处 import type 供上下文引用） */
+import type { Pinia } from './pinia/pinia.uts'
+
+/** 订阅取消函数（字段级 watch / 预留订阅生态的返回形态） */
+export type Unsubscribe = () => void
+
+/** 订阅回调（v1 简化形态：无参数；整体 subscribe 已裁掉，见差异对照表） */
+export type SubscribeCallback = () => void
+
+/**
+ * 插件上下文：对齐标准 Pinia 的 { pinia, store, storeId } 三字段。
+ * store 为 any（使用处 as 收窄为具体 store 类型），满足 UTS 名义类型系统。
+ */
+export type PiniaPluginContext = {
+	/** 当前 Pinia 实例 */
+	pinia: Pinia
+	/** 刚创建的 store 实例 */
+	store: any
+	/** store id */
+	storeId: string
+}
+
+/**
+ * 插件函数类型。UTS 约束：返回 void——禁止向既有对象动态注入属性，
+ * 故裁掉标准 Pinia「插件返回对象合并进 store」的能力，插件逻辑通过 ctx 完成。
+ * 注意 UTS 函数类型必须用箭头语法。
+ */
+export type PiniaPlugin = (ctx: PiniaPluginContext) => void

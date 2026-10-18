@@ -1,0 +1,150 @@
+/**
+ * 配置三级合并 + 归一化（normalize 层，设计 3.6 / 3.8）
+ *
+ * 归属配置域（config/）：三级合并与归一化都是「请求发出前的配置加工」，
+ * 与 configureRequest（config/index.uts）同域，不属于通用工具（utils/）。
+ *
+ * 合并顺序：内置默认 < 实例 defaults < 请求级 RequestConfig
+ * - 标量字段（method / timeout）请求级有值即覆盖，否则逐级回退内置默认
+ * - header 浅合并（默认 header 键被请求级同名键覆盖），写入全新对象，不改业务入参
+ * - 回调字段（validateStatus）请求级有值即整体覆盖
+ * - baseURL 拼接：绝对地址原样使用；相对路径无 baseURL → fail-fast ERR_CONFIG
+ * - params 库内确定性编码进 url；GET / HEAD 的 UTSJSONObject data 并入 query
+ *   后不再透传原生（不依赖官方未明文的隐式行为）
+ * - 归一化产物即发送快照：url 为已拼接的完整地址，params 清空（已编码进 url）
+ */
+import type { RequestConfig, RequestDefaults, RequestMethod } from '../../interface.uts'
+import type { NormalizeResult } from '../types'
+import { buildRequestError } from '../utils/error'
+import { isAbsoluteUrl, encodeParams, appendQuery, joinUrl } from '../utils/url'
+import { BUILTIN_METHOD, BUILTIN_TIMEOUT, BUILTIN_VALIDATE_STATUS } from '../constants/defaults'
+
+/**
+ * 归一化请求配置（不做参数合法性以外的网络行为）
+ * @param defaults 实例默认配置（字段可为 null，逐项回退内置默认）
+ * @param req 请求级配置（url 必填，其余可选）
+ * @returns NormalizeResult（fail-fast 时 config 为 null，error 为 ERR_PARAM / ERR_CONFIG）
+ */
+export function normalizeRequest(defaults: RequestDefaults, req: RequestConfig): NormalizeResult {
+	// ===== 1. url 校验（ERR_PARAM）=====
+	const rawUrl = req.url
+	if (rawUrl.trim().length == 0) {
+		return buildNormalizeError('ERR_PARAM', 'url 不能为空', req)
+	}
+
+	// ===== 2. 标量字段三级合并（先取局部变量再判空，规避字段空安全收窄限制）=====
+	const reqMethod = req.method
+	let method: RequestMethod = 'GET'
+	if (reqMethod != null) {
+		method = reqMethod
+	}
+
+	const reqBase = req.baseURL
+	let baseURL: string | null = null
+	if (reqBase != null) {
+		baseURL = reqBase
+	} else {
+		baseURL = defaults.baseURL
+	}
+
+	const defTimeout = defaults.timeout
+	const reqTimeout = req.timeout
+	let timeout: number = BUILTIN_TIMEOUT
+	if (defTimeout != null) {
+		timeout = defTimeout
+	}
+	if (reqTimeout != null) {
+		timeout = reqTimeout
+	}
+
+	const defVS = defaults.validateStatus
+	const reqVS = req.validateStatus
+	let validateStatus: (statusCode: number) => boolean = BUILTIN_VALIDATE_STATUS
+	if (defVS != null) {
+		validateStatus = defVS
+	}
+	if (reqVS != null) {
+		validateStatus = reqVS
+	}
+
+	// ===== 3. header 浅合并（全新对象，不改业务入参；遍历用 keys() + 索引循环，
+	//          M4 云打包实证 toMap().forEach 双参回调 Kotlin 端签名不匹配）=====
+	const header: UTSJSONObject = {}
+	const defHeader = defaults.header
+	if (defHeader != null) {
+		const defKeys = UTSJSONObject.keys(defHeader)
+		for (let i = 0; i < defKeys.length; i++) {
+			header[defKeys[i]] = defHeader[defKeys[i]]
+		}
+	}
+	const reqHeader = req.header
+	if (reqHeader != null) {
+		const reqKeys = UTSJSONObject.keys(reqHeader)
+		for (let i = 0; i < reqKeys.length; i++) {
+			header[reqKeys[i]] = reqHeader[reqKeys[i]]
+		}
+	}
+
+	// ===== 4. baseURL 拼接（ERR_CONFIG fail-fast）=====
+	let fullUrl = rawUrl
+	if (!isAbsoluteUrl(rawUrl)) {
+		const base = baseURL
+		if (base == null || base.trim().length == 0) {
+			return buildNormalizeError('ERR_CONFIG', '相对路径请求必须配置 baseURL', req)
+		}
+		fullUrl = joinUrl(base, rawUrl)
+	}
+
+	// ===== 5. params 编码 + GET / HEAD data 并入 query =====
+	let bodyData: any | null = req.data
+	let query = ''
+	const reqParams = req.params
+	if (reqParams != null) {
+		query = encodeParams(reqParams)
+	}
+	if (method == 'GET' || method == 'HEAD') {
+		const getData = bodyData
+		bodyData = null
+		if (getData instanceof UTSJSONObject) {
+			const dataQuery = encodeParams(getData as UTSJSONObject)
+			if (dataQuery.length > 0) {
+				query = query.length > 0 ? query + '&' + dataQuery : dataQuery
+			}
+		}
+	}
+	fullUrl = appendQuery(fullUrl, query)
+
+	// ===== 6. 组装发送快照（params 已编码进 url，清空避免复用时二次拼接）=====
+	const finalConfig: RequestConfig = {
+		url: fullUrl,
+		method: method,
+		baseURL: baseURL,
+		params: null,
+		data: bodyData,
+		header: header,
+		timeout: timeout,
+		dataType: req.dataType,
+		responseType: req.responseType,
+		enableQuic: req.enableQuic,
+		sslVerify: req.sslVerify,
+		withCredentials: req.withCredentials,
+		firstIpv4: req.firstIpv4,
+		enableChunked: req.enableChunked,
+		validateStatus: validateStatus,
+		cancelToken: req.cancelToken,
+		transformRequest: req.transformRequest,
+		transformResponse: req.transformResponse,
+		onTask: req.onTask
+	}
+	const okResult: NormalizeResult = { config: finalConfig, error: null }
+	return okResult
+}
+
+/** 构造 normalize 阶段的 fail-fast 结果（config 挂原始请求级配置） */
+function buildNormalizeError(code: 'ERR_PARAM' | 'ERR_CONFIG', errMsg: string, req: RequestConfig): NormalizeResult {
+	const result: NormalizeResult = {
+		config: null,
+		error: buildRequestError(code, errMsg, null, null, req, null)
+	}
+	return result
+}

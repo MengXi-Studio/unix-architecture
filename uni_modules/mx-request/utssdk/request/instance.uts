@@ -1,0 +1,119 @@
+/**
+ * 多实例工厂与默认实例装配（设计 3.1 / 3.6）
+ *
+ * - defaultCore：默认实例核心（模块级单例，configureRequest 写其 defaults）
+ * - createRequestImpl：创建隔离的实例核心（defaults / 拦截器注册表全独立），
+ *   返回与默认实例同构的 RequestInstance（跨代理形态 M2 spike 已验证）
+ * - getUriImpl：构建完整 URL（含 params 编码），不发网络、不跑拦截器
+ */
+import type { RequestConfig, RequestQuickConfig, RequestDefaults, RequestInstance, ResponseAny, RequestError } from '../interface.uts'
+import type { InstanceCore } from './types'
+import { dispatchImpl } from './core'
+import { getImpl, postImpl, putImpl, patchImpl, delImpl, headImpl, optionsImpl } from './shortcut'
+import { useRequestInterceptorImpl, useResponseInterceptorImpl, ejectInterceptorImpl } from './interceptors'
+import { normalizeRequest } from './config/normalize'
+import { BUILTIN_TIMEOUT, BUILTIN_VALIDATE_STATUS } from './constants/defaults'
+
+/** 构造内置默认（RequestDefaults 字段全 null 时逐项回退到这里的值） */
+export function createBuiltinDefaults(): RequestDefaults {
+	const defaults: RequestDefaults = {
+		baseURL: null,
+		timeout: BUILTIN_TIMEOUT,
+		header: null,
+		validateStatus: BUILTIN_VALIDATE_STATUS
+	}
+	return defaults
+}
+
+/** 默认实例核心（模块级单例；入口 API 全部经由它） */
+export const defaultCore: InstanceCore = {
+	defaults: createBuiltinDefaults(),
+	requestInterceptors: [],
+	responseInterceptors: []
+}
+
+/**
+ * 覆盖实例默认配置（configureRequest / instance.setConfig 共用）
+ * @param core 目标实例核心
+ * @param defaults 新默认值（字段为 null 表示沿用内置默认，normalize 层兜底）
+ */
+export function setCoreDefaults(core: InstanceCore, defaults: RequestDefaults): void {
+	core.defaults = defaults
+}
+
+/**
+ * 构建完整 URL（含 params 编码；不发网络）
+ *
+ * 归一化失败（ERR_PARAM / ERR_CONFIG）时返回原始 url 兜底
+ */
+export function getUriImpl(core: InstanceCore, config: RequestConfig | null): string {
+	if (config == null) {
+		return ''
+	}
+	const norm = normalizeRequest(core.defaults, config)
+	const merged = norm.config
+	if (merged != null) {
+		return merged.url
+	}
+	return config.url
+}
+
+/**
+ * 创建请求实例（对标 axios.create）
+ * @param defaults 实例默认配置（null 表示全用内置默认）
+ * @returns 实例对象（与默认实例同构）
+ */
+export function createRequestImpl(defaults: RequestDefaults | null): RequestInstance {
+	const core: InstanceCore = {
+		defaults: defaults == null ? createBuiltinDefaults() : defaults,
+		requestInterceptors: [],
+		responseInterceptors: []
+	}
+	return buildInstance(core)
+}
+
+/** 装配实例对象（方法闭包持有各自实例核心，实现多实例隔离） */
+function buildInstance(core: InstanceCore): RequestInstance {
+	const instance: RequestInstance = {
+		request: (config: RequestConfig): Promise<ResponseAny> => {
+			return dispatchImpl<any>(core, config)
+		},
+		get: (url: string, config: RequestQuickConfig | null): Promise<ResponseAny> => {
+			return getImpl<any>(core, url, config)
+		},
+		post: (url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseAny> => {
+			return postImpl<any>(core, url, data, config)
+		},
+		put: (url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseAny> => {
+			return putImpl<any>(core, url, data, config)
+		},
+		patch: (url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseAny> => {
+			return patchImpl<any>(core, url, data, config)
+		},
+		del: (url: string, config: RequestQuickConfig | null): Promise<ResponseAny> => {
+			return delImpl<any>(core, url, config)
+		},
+		head: (url: string, config: RequestQuickConfig | null): Promise<ResponseAny> => {
+			return headImpl<any>(core, url, config)
+		},
+		options: (url: string, config: RequestQuickConfig | null): Promise<ResponseAny> => {
+			return optionsImpl<any>(core, url, config)
+		},
+		getUri: (config: RequestConfig | null): string => {
+			return getUriImpl(core, config)
+		},
+		setConfig: (d: RequestDefaults): void => {
+			setCoreDefaults(core, d)
+		},
+		useRequestInterceptor: (onFulfilled: (config: RequestConfig) => RequestConfig): number => {
+			return useRequestInterceptorImpl(core, onFulfilled)
+		},
+		useResponseInterceptor: (onFulfilled: ((res: ResponseAny) => ResponseAny) | null, onRejected: ((err: RequestError) => any | null) | null): number => {
+			return useResponseInterceptorImpl(core, onFulfilled, onRejected)
+		},
+		ejectInterceptor: (id: number): void => {
+			ejectInterceptorImpl(core, id)
+		}
+	}
+	return instance
+}

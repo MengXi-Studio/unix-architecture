@@ -1,0 +1,106 @@
+/**
+ * Params 存储管理器
+ *
+ * 管理页面参数的存储与读取，支持内存 Map 与 uni storage 两种方式。
+ * 使用 uni-router 相同的「内存/持久化 + key」模式。
+ * class 实现：非蒸汽（Kotlin/Swift）端不支持「含方法的对象字面量 type」。
+ */
+import type { ParamObject } from '../../types/route'
+import { warn, generateId } from '../../utils'
+import { PARAMS_STORAGE_PREFIX } from '../../constants'
+
+/** 将 ParamObject(Map) 序列化为 UTSJSONObject（用于 JSON 存储） */
+function mapToRecord(params: ParamObject): UTSJSONObject {
+	const obj = new UTSJSONObject()
+	params.forEach((value, key) => {
+		obj[key] = value
+	})
+	return obj
+}
+
+/** 将 plain 对象反序列化为 ParamObject(Map)（原生端用 UTSJSONObject.keys 遍历） */
+function recordToMap(record: any): ParamObject {
+	const m = new Map<string, string>()
+	const obj = record as UTSJSONObject
+	const keys = UTSJSONObject.keys(obj)
+	for (var i = 0; i < keys.length; i++) {
+		const k = keys[i]
+		m.set(k, obj[k] as string)
+	}
+	return m
+}
+
+/** 生成存储使用的完整 key（带前缀） */
+function storageKey(key: string): string {
+	return PARAMS_STORAGE_PREFIX + key
+}
+
+export class ParamsManager {
+	private memoryMap: Map<string, ParamObject> = new Map<string, ParamObject>()
+	private currentDefaultPersistent: boolean
+
+	constructor(defaultPersistent: boolean) {
+		this.currentDefaultPersistent = defaultPersistent
+	}
+
+	/** 设置全局默认持久化策略 */
+	setDefaultPersistent(persistent: boolean): void {
+		this.currentDefaultPersistent = persistent
+	}
+
+	/** 存储 params，返回生成的 key */
+	set(params: ParamObject, persistent: boolean | null = null): string {
+		const useStorage = persistent === null ? this.currentDefaultPersistent : persistent
+		const key = generateId('pk_')
+		// 校验可序列化性
+		try {
+			JSON.stringify(mapToRecord(params))
+		} catch (e) {
+			warn('params must be JSON-serializable. Non-serializable values will be lost.')
+		}
+		if (useStorage) {
+			try {
+				uni.setStorageSync(storageKey(key), JSON.stringify(mapToRecord(params)))
+			} catch (e) {
+				warn('Failed to write params to storage, falling back to memory storage.')
+				this.memoryMap.set(key, new Map(params))
+			}
+		} else {
+			this.memoryMap.set(key, new Map(params))
+		}
+		return key
+	}
+
+	/** 根据 key 读取 params（不做惰性清理，用于目标页尚未入栈的导航解析阶段） */
+	peek(key: string): ParamObject | null {
+		if (this.memoryMap.has(key)) {
+			const stored = this.memoryMap.get(key)
+			if (stored !== null) {
+				return new Map(stored)
+			}
+		}
+		try {
+			const raw = uni.getStorageSync(storageKey(key))
+			if (raw != null) {
+				try {
+					return recordToMap(JSON.parse(raw as string)!)
+				} catch (e) {
+					return null
+				}
+			}
+		} catch (e) {
+			// storage 读取失败忽略
+		}
+		return null
+	}
+
+	/** 删除指定 key 的 params */
+	remove(key: string): void {
+		this.memoryMap.delete(key)
+		try {
+			uni.removeStorageSync(storageKey(key))
+		} catch (e) {
+			// ignore
+		}
+	}
+}

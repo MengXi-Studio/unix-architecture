@@ -1,0 +1,107 @@
+/**
+ * 路由状态管理器
+ *
+ * 维护 currentRoute 响应式 ref，导航完成后触发 onChange 通知；提供 onReady 等待就绪。
+ * 实现采用 class：非蒸汽（Kotlin/Swift）端不支持「含方法的对象字面量 type」，
+ * 对象字面量会被推断为 UTSJSONObject 导致方法调用失效，故用 class 承载方法。
+ */
+import { shallowRef } from 'vue'
+import type { Ref } from 'vue'
+import type { RouteLocation } from '../types'
+import { warn } from '../utils'
+
+/** 路由变化监听器类型 */
+export type RouteChangeListener = (to: RouteLocation, from: RouteLocation) => void
+
+/** 路由状态管理器 */
+export class RouteState {
+	/** 当前路由位置（响应式） */
+	currentRoute: Ref<RouteLocation>
+
+	private ready: boolean
+	private readyTimeout: number
+	private listeners: RouteChangeListener[]
+	private readyWaiters: (() => void)[]
+
+	constructor(readyTimeout: number = 0) {
+		this.readyTimeout = readyTimeout
+		this.ready = false
+		this.listeners = []
+		this.readyWaiters = []
+		// 起始路由：路径 '/' 的空位置。uni-app x 页面栈通常非空，首次导航/同步前置为占位。
+		const initial: RouteLocation = {
+			path: '/',
+			name: null,
+			meta: {},
+			query: new Map(),
+			params: new Map(),
+			fullPath: '/',
+			hash: '',
+			matched: []
+		}
+		this.currentRoute = shallowRef<RouteLocation>(initial)
+	}
+
+	/** 设置当前路由位置（触发 route change 通知） */
+	setCurrentRoute(to: RouteLocation): void {
+		const from = this.currentRoute.value
+		this.currentRoute.value = to
+		this.notify(to, from)
+	}
+
+	private notify(to: RouteLocation, from: RouteLocation): void {
+		for (var i = 0; i < this.listeners.length; i++) {
+			try {
+				this.listeners[i](to, from)
+			} catch (e) {
+				warn(`路由变化监听器执行异常: ${e}`)
+			}
+		}
+	}
+
+	/** 标记路由器就绪 */
+	markReady(): void {
+		this.ready = true
+		// 唤醒所有等待者
+		while (this.readyWaiters.length > 0) {
+			const waiter = this.readyWaiters.shift()
+			if (waiter !== null) {
+				waiter()
+			}
+		}
+	}
+
+	/** 等待路由器就绪 */
+	onReady(): Promise<void> {
+		if (this.ready) {
+			return Promise.resolve()
+		}
+		if (this.readyTimeout <= 0) {
+			return new Promise<void>(resolve => {
+				this.readyWaiters.push(() => {
+					resolve()
+				})
+			})
+		}
+		return new Promise<void>((resolve, reject) => {
+			const timer = setTimeout(() => {
+				reject(new Error('路由器就绪超时'))
+			}, this.readyTimeout)
+			this.readyWaiters.push(() => {
+				clearTimeout(timer)
+				resolve()
+			})
+		})
+	}
+
+	/** 注册路由变化监听器，返回取消函数 */
+	onRouteChange(listener: RouteChangeListener): () => void {
+		this.listeners.push(listener)
+		return () => {
+			const index = this.listeners.indexOf(listener)
+			if (index > -1) {
+				this.listeners.splice(index, 1)
+			}
+		}
+	}
+}

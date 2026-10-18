@@ -1,0 +1,62 @@
+/**
+ * 内置 transform（设计 3.5；序列化依赖原生 adapter，库内不重造）
+ *
+ * - transformRequest：业务提供即替换内置；data 为 UTSJSONObject 且业务
+ *   未显式设置 content-type 时补设 application/json（GET / HEAD 的 data
+ *   已在 normalize 并入 query，天然不触发）
+ * - transformResponse：业务提供即替换内置；内置为原样透传
+ */
+import type { RequestConfig } from '../../interface.uts'
+import { BUILTIN_CONTENT_TYPE } from '../constants/defaults'
+
+/**
+ * 请求体变换 + 自动 Content-Type（原地修改 cfg）
+ * @param cfg 归一化后的请求配置
+ */
+export function applyTransformRequest(cfg: RequestConfig): void {
+	const transform = cfg.transformRequest
+	if (transform != null) {
+		cfg.data = transform(cfg.data)
+	}
+	const data = cfg.data
+	if (data instanceof UTSJSONObject) {
+		ensureContentType(cfg)
+	}
+}
+
+/**
+ * 响应体变换
+ * @param cfg 发起请求的最终合并配置
+ * @param data 原生返回数据（dataType=json 时已由原生 JSON.parse）
+ * @returns 变换后数据（无自定义 transform 时原样返回）
+ */
+export function applyTransformResponse(cfg: RequestConfig, data: any): any {
+	const transform = cfg.transformResponse
+	if (transform != null) {
+		return transform(data)
+	}
+	return data
+}
+
+/** 确保 header 存在 content-type（键大小写不敏感检查；未设置才补默认值） */
+function ensureContentType(cfg: RequestConfig): void {
+	const header = cfg.header
+	if (header == null) {
+		const fresh: UTSJSONObject = {}
+		fresh['content-type'] = BUILTIN_CONTENT_TYPE
+		cfg.header = fresh
+		return
+	}
+	// 遍历形态：keys() + 索引循环（M4 云打包实证 toMap().forEach 双参回调
+	// Kotlin 端签名不匹配，同 url.uts encodeParams）
+	const keys = UTSJSONObject.keys(header)
+	let hasContentType = false
+	for (let i = 0; i < keys.length; i++) {
+		if (keys[i].toLowerCase() == 'content-type') {
+			hasContentType = true
+		}
+	}
+	if (!hasContentType) {
+		header['content-type'] = BUILTIN_CONTENT_TYPE
+	}
+}

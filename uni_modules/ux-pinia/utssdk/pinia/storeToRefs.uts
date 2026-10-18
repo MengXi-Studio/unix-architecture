@@ -1,0 +1,9 @@
+/**
+ * storeToRefs 实现（入口内联声明对外同名 API）
+ *
+ * 方案 B（定稿）：setup 返回对象本身就是 ref 集合，透传实现（幂等）。
+ * 独立函数形态为未来内部实现演进保留签名位置，不破坏用户代码。
+ */
+export function storeToRefsImpl<T>(store: T): T {
+	return store
+}

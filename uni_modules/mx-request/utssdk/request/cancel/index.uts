@@ -1,0 +1,99 @@
+/**
+ * 取消源与任务注册表（设计 3.7：库内确定性 abort）
+ *
+ * - createCancelSourceImpl 创建 token + cancel 闭包，token 创建即在注册表
+ *   登记（含空任务列表）
+ * - sendRequest 拿到原生 RequestTask 后 registerCancelTask 登记；请求
+ *   终态（success / fail）时注销
+ * - cancel() 置位 token + abort 该 token 关联的全部进行中任务，随后移除
+ *   注册表项（已取消的 token 不会再有新任务挂入——发送前检查拦截）
+ * - 取消语义 100% 确定性：abort 由库主动调用，不依赖原生 errMsg 特征匹配；
+ *   fail 回调按 token.canceled 标志归类 ERR_CANCELED
+ * - 业务自建 token（非本模块创建）无 cancel 闭包，仅享受发送前取消检查
+ */
+import type { CancelToken, CancelSource } from '../../interface.uts'
+
+/** 注册表项（token 引用 → 进行中任务列表） */
+export type CancelRegistryEntry = {
+	token: CancelToken
+	tasks: Array<RequestTask>
+}
+
+/** token → 任务注册表（token 以引用相等匹配） */
+const cancelRegistry: Array<CancelRegistryEntry> = []
+
+/**
+ * 创建取消源
+ * @returns 取消源（token 挂到 RequestConfig.cancelToken；cancel 取消关联请求）
+ */
+export function createCancelSourceImpl(): CancelSource {
+	const token: CancelToken = {
+		canceled: false,
+		reason: null
+	}
+	const entry: CancelRegistryEntry = {
+		token: token,
+		tasks: []
+	}
+	cancelRegistry.push(entry)
+	const cancel = (reason: string | null): void => {
+		if (token.canceled) {
+			return
+		}
+		token.canceled = true
+		token.reason = reason
+		// 先摘除注册表项，再对快照逐个 abort（终态回调里的注销自然变空操作）
+		const snapshot = entry.tasks.splice(0, entry.tasks.length)
+		removeRegistryEntry(token)
+		for (let i = 0; i < snapshot.length; i++) {
+			snapshot[i].abort()
+		}
+	}
+	const source: CancelSource = {
+		token: token,
+		cancel: cancel
+	}
+	return source
+}
+
+/**
+ * 登记进行中任务（sendRequest 拿到 task 后调用）
+ * @param token 关联取消令牌（非注册表内的业务自建 token 登记无效果）
+ * @param task 原生请求任务
+ */
+export function registerCancelTask(token: CancelToken, task: RequestTask): void {
+	for (let i = 0; i < cancelRegistry.length; i++) {
+		if (cancelRegistry[i].token === token) {
+			cancelRegistry[i].tasks.push(task)
+			return
+		}
+	}
+}
+
+/**
+ * 注销已终态任务（success / fail 回调调用，防止 cancel 后 abort 已完成任务）
+ */
+export function unregisterCancelTask(token: CancelToken, task: RequestTask): void {
+	for (let i = 0; i < cancelRegistry.length; i++) {
+		if (cancelRegistry[i].token === token) {
+			const tasks = cancelRegistry[i].tasks
+			for (let j = 0; j < tasks.length; j++) {
+				if (tasks[j] === task) {
+					tasks.splice(j, 1)
+					return
+				}
+			}
+			return
+		}
+	}
+}
+
+/** 摘除 token 的注册表项 */
+function removeRegistryEntry(token: CancelToken): void {
+	for (let i = 0; i < cancelRegistry.length; i++) {
+		if (cancelRegistry[i].token === token) {
+			cancelRegistry.splice(i, 1)
+			return
+		}
+	}
+}

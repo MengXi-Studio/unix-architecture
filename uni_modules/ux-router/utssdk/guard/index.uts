@@ -1,0 +1,13 @@
+/**
+ * 守卫管理器实现
+ */
+import { GuardManager, type GuardResult } from './type'
+
+export type { GuardManager, GuardResult } from './type'
+
+/**
+ * 创建守卫管理器，维护 beforeEach / beforeResolve / afterEach 队列并暴露执行方法
+ */
+export function createGuardManager(): GuardManager {
+	return new GuardManager()
+}

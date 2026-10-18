@@ -1,0 +1,84 @@
+/**
+ * 页面间定向通信通道（EventChannel）
+ *
+ * 每次携带 events 的导航会创建一个独立通道（以全局唯一 key 标识）：
+ * - 打开方（opener）在导航前把监听表注册进通道（on/once）
+ * - 被打开页通过 useOpenerEventChannel() 拿到通道实例，emit 回传数据 / on 接收推送
+ *
+ * 跨页桥接：通道 key 经导航 URL 查询串（__evt__=...）传递；
+ * 内部监听存放在自研 eventBus（命名空间隔离），不依赖官方 uni.$on。
+ */
+import { eventBus } from './bus'
+
+/** 通道事件在总线上的命名空间分隔符 */
+const CHANNEL_NS = 'evt:'
+
+/** 通道 key 自增序号 */
+let nextChannelSeq: number = 0
+
+/** 通道事件在总线上的实际事件名（按通道隔离，避免跨通道串扰） */
+function nsEvent(channelKey: string, eventName: string): string {
+	return CHANNEL_NS + channelKey + ':' + eventName
+}
+
+/**
+ * 单条页面间通信通道（对齐官方 EventChannel：on / once / off / emit）
+ */
+export class EventChannel {
+	/** 通道唯一标识（经 URL 查询串跨页传递） */
+	readonly key: string
+
+	constructor(key: string) {
+		this.key = key
+	}
+
+	/** 监听打开方推送的事件（on/once/off 均基于自研总线） */
+	on(eventName: string, fn: (data: any) => any): number {
+		return eventBus.on(nsEvent(this.key, eventName), fn)
+	}
+
+	/** 监听一次打开方推送的事件 */
+	once(eventName: string, fn: (data: any) => any): number {
+		return eventBus.once(nsEvent(this.key, eventName), fn)
+	}
+
+	/** 移除监听器（传 $on/$once 返回的 id；省略移除该事件全部监听器） */
+	off(eventName: string, target: number | null = null): void {
+		eventBus.off(nsEvent(this.key, eventName), target)
+	}
+
+	/** 向打开方发送数据（触发打开方 events 中注册的同名监听器） */
+	emit(eventName: string, ...args: any[]): void {
+		eventBus.emit(nsEvent(this.key, eventName), ...args)
+	}
+}
+
+/**
+ * 通道管理器：负责任务通道的创建 / 按 key 获取 / 清理
+ */
+export class ChannelManager {
+	private channels: Map<string, EventChannel> = new Map<string, EventChannel>()
+
+	/** 创建新通道并返回其唯一 key（预注册空通道，供打开方注册监听） */
+	create(): string {
+		const key = 'ch' + (nextChannelSeq++) + '_' + Date.now().toString()
+		if (!this.channels.has(key)) {
+			this.channels.set(key, new EventChannel(key))
+		}
+		return key
+	}
+
+	/** 按 key 获取通道（不存在时返回 null） */
+	get(key: string): EventChannel | null {
+		const ch = this.channels.get(key)
+		return ch === null ? null : ch
+	}
+
+	/** 移除通道并清空其监听器（导航中止 / 页面销毁时调用） */
+	remove(key: string): void {
+		this.channels.delete(key)
+	}
+}
+
+/** 全局通道管理器单例 */
+export const channelManager: ChannelManager = new ChannelManager()

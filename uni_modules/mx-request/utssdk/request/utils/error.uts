@@ -1,0 +1,52 @@
+/**
+ * RequestError 构造与联合类型判别（内部工具）
+ *
+ * 判别策略（拦截器 onRejected 返回 any | null，运行时载荷为 ResponseAny | RequestError | null 三态）：
+ * 联合类型跨端编码为 Any?（Kotlin 产物已验证），无法用 instanceof / typeof
+ * 区分（web 端 type 别名擦除）。统一用 errSubject 契约判别：
+ * - RequestError.errSubject 恒为 'unix-request'（库内构造；业务换错沿用结构）
+ * - ResponseResult 无 errSubject 字段
+ * Kotlin 端 ResponseResult 强转 RequestError 抛 ClassCastException，由
+ * catch 归类为响应；web 端 as 擦除后等价于字段探测（undefined 不等于契约值）。
+ */
+import type { RequestConfig, RequestError, RequestErrorCode, ResponseAny } from '../../interface.uts'
+import { BUILTIN_ERR_SUBJECT } from '../constants/defaults'
+
+/**
+ * 构造统一错误结构
+ * @param code 库内错误码
+ * @param errMsg 错误描述
+ * @param nativeErrCode 原生 fail errCode 原值（库内错误传 null）
+ * @param statusCode HTTP 状态码（仅 BAD_REQUEST / BAD_RESPONSE 传值）
+ * @param config 发起请求的最终合并配置
+ * @param response HTTP 错误响应原文（其余传 null）
+ */
+export function buildRequestError(code: RequestErrorCode, errMsg: string, nativeErrCode: number | null, statusCode: number | null, config: RequestConfig | null, response: ResponseAny | null): RequestError {
+	const err: RequestError = {
+		code: code,
+		errSubject: BUILTIN_ERR_SUBJECT,
+		errMsg: errMsg,
+		nativeErrCode: nativeErrCode,
+		statusCode: statusCode,
+		config: config,
+		response: response
+	}
+	return err
+}
+
+/**
+ * 判别联合类型值为 RequestError（换错）还是 ResponseAny（恢复）
+ * @param v 拦截器 onRejected 返回值（null 由调用方先行处理）
+ */
+export function isRequestErrorValue(v: any | null): boolean {
+	if (v == null) {
+		return false
+	}
+	try {
+		const probe = v as RequestError
+		return probe.errSubject == BUILTIN_ERR_SUBJECT
+	} catch (e) {
+		// Kotlin 端 ResponseResult 强转失败（ClassCastException）→ 是响应
+		return false
+	}
+}

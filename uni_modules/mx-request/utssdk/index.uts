@@ -1,0 +1,172 @@
+/**
+ * unix-request 插件跨平台根入口（uni_modules UTS 插件）
+ *
+ * 官方架构：本文件即无平台目录端（全端）的实现入口——纯编排层，
+ * uni.request 全端统一，无需平台目录。所有对外 API 以官方模板形态
+ * 声明：`export const apiName: ApiType = function (...) {}`。
+ *
+ * 红线（继承 unix-utils v0.8 实战）：
+ * 1. 插件内所有 .uts 同 Kotlin package，实现函数一律 Impl 后缀、内部
+ *    同语义常量 BUILTIN_/ERR_ 前缀，避免同名 top-level 符号触发导出
+ *    符号静默重整（__1）；
+ * 2. 不得用 export { x } from 转发链对外暴露 API——uts-proxy V1 只
+ *    解析本入口的内联声明。
+ */
+import { dispatchImpl } from './request/core'
+import { getImpl, postImpl, putImpl, patchImpl, delImpl, headImpl, optionsImpl } from './request/shortcut'
+import { defaultCore, createRequestImpl, getUriImpl } from './request/instance'
+import { useRequestInterceptorImpl, useResponseInterceptorImpl, ejectInterceptorImpl } from './request/interceptors'
+import { configureRequestImpl } from './request/config'
+import { createCancelSourceImpl } from './request/cancel'
+import type {
+	RequestConfig,
+	RequestQuickConfig,
+	RequestDefaults,
+	RequestInstance,
+	RequestError,
+	ResponseResult,
+	ResponseAny,
+	RequestMethod,
+	RequestGetUri,
+	UseRequestInterceptor,
+	UseResponseInterceptor,
+	EjectInterceptor,
+	ConfigureRequest,
+	CreateRequest,
+	CreateCancelSource,
+	CancelSource
+} from './interface.uts'
+
+/**
+ * 对外类型转发（同目录 interface.uts，非跨级 re-export）：
+ * 消费方 import type { RequestConfig } from '@/uni_modules/mx-request'
+ * 须经本入口解析（uts-proxy V1 的类型转发只影响消费方 TS 视图，
+ * API 编码生成仍只看上方内联 export const 声明）
+ */
+export type {
+	RequestMethod,
+	RequestErrorCode,
+	CancelToken,
+	CancelSource,
+	RequestConfig,
+	RequestQuickConfig,
+	RequestDefaults,
+	ResponseResult,
+	ResponseAny,
+	RequestError,
+	RequestInstance,
+	RequestGetUri,
+	UseRequestInterceptor,
+	UseResponseInterceptor,
+	EjectInterceptor,
+	ConfigureRequest,
+	CreateRequest,
+	CreateCancelSource
+} from './interface.uts'
+
+/* ============ 入口常量（对外契约；内部同语义常量见 request/constants，BUILTIN_ 前缀） ============ */
+
+/** 默认超时（毫秒） */
+export const DEFAULT_TIMEOUT: number = 60000
+
+/** 默认请求方法 */
+export const DEFAULT_METHOD: RequestMethod = 'GET'
+
+/** 统一错误 errSubject（RequestError.errSubject 固定值） */
+export const REQUEST_ERR_SUBJECT: string = 'unix-request'
+
+/* ============ 默认实例 API（泛型导出） ============ */
+
+/**
+ * 泛型 API 统一用 `export function apiName<T>` 具名声明（M4 云打包实证）：
+ * - const 绑定的泛型函数字面量转译为 Kotlin 匿名 `fun <T>`，Kotlin 禁止
+ *   （Type parameters are prohibited here，8 处编译错误根因）；
+ * - 顶层具名 `fun <T>` 合法，T 仅静态标注 ResponseResult<T>，无运行时
+ *   实例化需求（响应 data 实际以 Any 流转，泛型为消费方 TS 视图服务）。
+ * 非泛型 API 仍走官方 const 模式（见下方分节）。
+ */
+
+/**
+ * 请求主入口（返回 Promise，失败 reject RequestError）
+ */
+export function request<T>(config: RequestConfig): Promise<ResponseResult<T>> {
+	return dispatchImpl<T>(defaultCore, config)
+}
+
+/** GET 快捷方法 */
+export function get<T>(url: string, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return getImpl<T>(defaultCore, url, config)
+}
+
+/** POST 快捷方法 */
+export function post<T>(url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return postImpl<T>(defaultCore, url, data, config)
+}
+
+/** PUT 快捷方法 */
+export function put<T>(url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return putImpl<T>(defaultCore, url, data, config)
+}
+
+/** PATCH 快捷方法 */
+export function patch<T>(url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return patchImpl<T>(defaultCore, url, data, config)
+}
+
+/** DELETE 快捷方法（delete 为 UTS 保留字，别名 del） */
+export function del<T>(url: string, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return delImpl<T>(defaultCore, url, config)
+}
+
+/** HEAD 快捷方法 */
+export function head<T>(url: string, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return headImpl<T>(defaultCore, url, config)
+}
+
+/** OPTIONS 快捷方法 */
+export function options<T>(url: string, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return optionsImpl<T>(defaultCore, url, config)
+}
+
+/* ============ 默认实例 API（非泛型，官方 const 模式） ============ */
+
+/** 构建完整 URL（含 params 编码；不发网络） */
+export const getUri: RequestGetUri = function (config: RequestConfig | null): string {
+	return getUriImpl(defaultCore, config)
+}
+
+/** 注册请求拦截器（默认实例） */
+export const useRequestInterceptor: UseRequestInterceptor = function (onFulfilled: (config: RequestConfig) => RequestConfig): number {
+	return useRequestInterceptorImpl(defaultCore, onFulfilled)
+}
+
+/** 注册响应拦截器（默认实例） */
+export const useResponseInterceptor: UseResponseInterceptor = function (onFulfilled: ((res: ResponseAny) => ResponseAny) | null, onRejected: ((err: RequestError) => any | null) | null): number {
+	return useResponseInterceptorImpl(defaultCore, onFulfilled, onRejected)
+}
+
+/** 移除拦截器（默认实例） */
+export const ejectInterceptor: EjectInterceptor = function (id: number): void {
+	ejectInterceptorImpl(defaultCore, id)
+}
+
+/** 默认实例全局默认配置 */
+export const configureRequest: ConfigureRequest = function (defaults: RequestDefaults): void {
+	configureRequestImpl(defaults)
+}
+
+/* ============ 多实例与取消 ============ */
+
+/**
+ * 创建请求实例（对标 axios.create；M2 spike 项：返回对象跨代理形态）
+ */
+export const createRequest: CreateRequest = function (defaults: RequestDefaults | null): RequestInstance {
+	return createRequestImpl(defaults)
+}
+
+/**
+ * 创建取消源（token 挂到 RequestConfig.cancelToken，cancel 取消关联请求）
+ */
+export const createCancelSource: CreateCancelSource = function (): CancelSource {
+	return createCancelSourceImpl()
+}

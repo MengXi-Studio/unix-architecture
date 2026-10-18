@@ -1,0 +1,43 @@
+/**
+ * defineStore 实现（入口内联声明对外同名 API）
+ *
+ * 行为规范：
+ * - 首次 useStore() 执行 setup() 并登记注册表；后续调用返回同一实例
+ * - 同 id 重复 defineStore：警告 + 幂等（所有 useStore 闭包共享首个注册实例）
+ * - store 创建后按序调度 activePinia 的插件（PiniaPluginContext: { pinia, store, storeId }）
+ */
+import type { PiniaPluginContext } from '../interface.uts'
+import { getActivePiniaImpl } from './pinia.uts'
+import { definedIds, getStoreById, setStore } from './registry.uts'
+
+/** 实现函数（Impl 后缀，避免与入口同名符号冲突） */
+export function defineStoreImpl<T>(id: string, setup: () => T): () => T {
+	if (definedIds.has(id)) {
+		console.warn("[unix-pinia] store id '" + id + "' 已定义，本次定义将被忽略（返回既有实例）")
+	}
+	definedIds.add(id)
+
+	const useStore = (): T => {
+		const cached: any | null = getStoreById(id)
+		if (cached != null) {
+			return cached as T
+		}
+		const instance: T = setup()
+		// Kotlin 泛型擦除：T 进出 Map 必须显式 as any（error17）
+		setStore(id, instance as any)
+
+		// 插件调度（对齐 Pinia：store 创建时依次调用 pinia.use 注册的插件）
+		const pinia = getActivePiniaImpl()
+		if (pinia != null) {
+			const ctx: PiniaPluginContext = { pinia: pinia, store: instance as any, storeId: id }
+			const plugins = pinia.getPlugins()
+			for (let i = 0; i < plugins.length; i++) {
+				plugins[i](ctx)
+			}
+		}
+
+		console.log("[unix-pinia] store '" + id + "' 已创建")
+		return instance
+	}
+	return useStore
+}

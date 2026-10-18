@@ -1,0 +1,40 @@
+/**
+ * 通用工具（告警、对象判断等）
+ */
+
+/**
+ * 输出告警日志（可将 isEnabled 置 false 关闭）
+ */
+export let __DEV__: boolean = true
+
+/** 告警输出 */
+export function warn(message: string): void {
+	if (__DEV__) {
+		console.warn('[unix-router] ' + message)
+	}
+}
+
+/** 判断值是否为非 null 的对象 */
+export function isObject(value: any): boolean {
+	return value !== null && typeof value === 'object'
+}
+
+/** 判断是否为字符串 */
+export function isString(value: any): boolean {
+	return typeof value === 'string'
+}
+
+/** 判断是否为 Error 实例 */
+export function isError(value: any): boolean {
+	return value instanceof Error
+}
+
+/**
+ * 生成伪随机 id（时间戳 + 递增计数确保唯一性）
+ */
+let idCounter: number = 0
+export function generateId(prefix: string = ''): string {
+	idCounter = (idCounter + 1) % 100000
+	const now = Date.now()
+	return prefix + now.toString(36) + '_' + idCounter.toString(36)
+}

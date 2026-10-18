@@ -1,0 +1,34 @@
+/**
+ * 实例 API 实现（$-methods 的顶层函数映射；入口内联声明对外同名 API）
+ *
+ * UTS 无 Proxy、对象不可动态注入属性 → store.$patch/$dispose/$id
+ * 无法以方法形态挂到 setup 返回的 type 对象上，统一映射为模块级顶层函数。
+ *
+ * subscribe 已裁掉（P9 裁决，2026-10-17）：deep watch 方案在 Android 端对
+ * RefImpl 字段不触发（subCount=0），双端行为不一致，违背 G1。
+ * 替代模式：字段级 watch(store.count, cb)（P4 已双端验证）。
+ */
+import { removeStore, storeIdMap } from './registry.uts'
+
+/**
+ * ≙ store.$patch(fn)：批量修改（仅 mutator 形态）
+ * Pinia 的对象形态 patch(partialState) 依赖 Partial<T> 与字段反射，UTS 不可实现（差异表）
+ */
+export function patchImpl<T>(store: T, fn: (s: T) => void): void {
+	fn(store)
+}
+
+/**
+ * ≙ store.$dispose()：注销实例，下次 useStore() 重新执行 setup 重建
+ */
+export function disposeImpl<T>(store: T): void {
+	removeStore(store as any)
+}
+
+/**
+ * ≙ store.$id：反查 store id；未登记返回空串
+ */
+export function getStoreIdImpl<T>(store: T): string {
+	const id: string | null = storeIdMap.get(store as any)
+	return id != null ? id : ''
+}

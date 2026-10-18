@@ -1,0 +1,84 @@
+/**
+ * unix-storage 对外 API 声明（interface.uts，官方必需）
+ *
+ * 「声明和实现」分层（官方 UTS 插件架构）：
+ * - 本文件内联声明全部对外类型，供 uts-proxy V1 生成参数编码与
+ *   HBuilderX 语法提示（parseInterfaceTypes 仅解析本文件的内联声明）
+ * - 对外 API 在本插件入口 index.uts 内联声明（V1 代理只解析平台入口的
+ *   内联 export function / export const，re-export 链不可见）
+ * - 实现层引用本文件类型统一经 storage/types/index.uts 转发（同一符号，
+ *   满足 UTS 名义类型系统，无双重定义漂移）
+ *
+ * 红线（继承 unix-request 实战）：
+ * 1. 配置/入参类型字段值可空（`| null`），实现层统一判空兜底，无 undefined
+ * 2. 错误码一律字面量联合 type（UTS enum 无法跨 uts-proxy）
+ */
+
+/** 统一错误码（字面量联合；原生 fail errCode 由 nativeErrCode 原值透传不翻译） */
+export type StorageErrorCode = 'ERR_PARAM' | 'ERR_NATIVE'
+
+/** 统一错误结构（对标 unix-request RequestError 模式） */
+export type StorageError = {
+	/** 库内错误码（字面量联合） */
+	code: StorageErrorCode
+	/** 固定主题，便于业务过滤 */
+	errSubject: string
+	/** 错误描述 */
+	errMsg: string
+	/** 原生 fail errCode 原值透传，库内错误为 null */
+	nativeErrCode: number | null
+	/** 关联的业务原始 key（未含前缀；与 key 无关的错误为 null） */
+	key: string | null
+}
+
+/**
+ * 全局 / 实例默认配置（configureStorage / createStorage / setConfig 入参；
+ * 字段值 null 表示沿用内置默认）
+ */
+export type StorageDefaults = {
+	/** key 前缀（内置默认 'mx_storage:'；禁止 uni- / dcloud_ 保留前缀开头） */
+	keyPrefix: string | null
+	/** 默认 TTL 毫秒（null = 永不过期） */
+	defaultTTL: number | null
+}
+
+/** 存储信息（uni.getStorageInfo 原样结构；keys 为全端全量 key，不做命名空间过滤） */
+export type StorageInfo = {
+	keys: Array<string>
+	/** 当前占用（KB） */
+	currentSize: number
+	/** 容量上限（KB） */
+	limitSize: number
+}
+
+/**
+ * 实例对象（createStorage 返回，与默认实例同构）。
+ *
+ * TTL 三级回退：调用级 ttl 参数 → 实例 defaultTTL → 内置默认（null 永不过期）。
+ * 实例方法 data 以 any 返回（业务侧按需 JSON.parse<T> 断言还原），
+ * 泛型仅顶层 API 提供（export function get<T>）。
+ */
+export type StorageInstance = {
+	/** 写入缓存（record 包裹过期时间戳；ttl null 沿用实例默认） */
+	set: (key: string, data: any | null, ttl: number | null) => Promise<void>
+	/** 读取缓存；未命中 / 已过期返回 null，不 reject */
+	get: (key: string) => Promise<any | null>
+	/** 移除指定缓存 */
+	remove: (key: string) => Promise<void>
+	/** 清理本命名空间全部缓存（按前缀过滤后逐个移除，不触碰其他数据） */
+	clear: () => Promise<void>
+	/** 存储信息（uni.getStorageInfo 原样结构） */
+	info: () => Promise<StorageInfo>
+	/** 本命名空间 key 列表（剥前缀后返回原始 key） */
+	keys: () => Promise<Array<string>>
+	/** 扫描清理本命名空间已过期记录，返回清理条数 */
+	clearExpired: () => Promise<number>
+	/** 覆盖实例默认配置 */
+	setConfig: (defaults: StorageDefaults) => void
+}
+
+/** configureStorage 函数类型（默认实例全局默认配置） */
+export type ConfigureStorage = (defaults: StorageDefaults) => void
+
+/** createStorage 函数类型（多实例工厂，defaults 为 null 时全用内置默认） */
+export type CreateStorage = (defaults: StorageDefaults | null) => StorageInstance

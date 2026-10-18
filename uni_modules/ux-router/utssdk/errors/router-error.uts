@@ -1,0 +1,29 @@
+/**
+ * 路由器错误基类与 uni.* 原生 API 错误负载
+ */
+import { RouterErrorCode } from '../enums'
+import type { RouteLocation } from '../types'
+
+/** uni.* 原生导航 API 回调错误负载（fail 回调参数） */
+export interface UniNavigationApiError {
+	errMsg?: string
+	context?: string
+}
+
+/** 路由器错误基类 */
+export class RouterError extends Error {
+	/** 错误码 */
+	code: RouterErrorCode
+	/** 触发错误的目标路由 */
+	to: RouteLocation
+	/** 触发错误的来源路由 */
+	from: RouteLocation
+
+	constructor(code: RouterErrorCode, message: string, to: RouteLocation, from: RouteLocation) {
+		super(message)
+		this.code = code
+		this.to = to
+		this.from = from
+		this.name = 'RouterError'
+	}
+}

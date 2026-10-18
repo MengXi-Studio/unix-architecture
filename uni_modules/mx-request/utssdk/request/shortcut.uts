@@ -1,0 +1,113 @@
+/**
+ * 快捷方法实现（get / post / put / patch / del / head / options）
+ *
+ * url / method 固定注入（method 由方法名决定，config.method 不透传，与
+ * axios 语义一致），连同 data 并入请求级配置后走 dispatch 主流程
+ * （normalize 在管线内完成三级合并与 baseURL / params 处理）。
+ *
+ * M3 运行验证教训：此前 method 依赖 config.method 透传（快捷 config 通常
+ * 为 null），post/put/patch 实际以默认 GET 发出——method 必须由快捷方法
+ * 自身固定注入，不得依赖调用方 config。
+ */
+import type { RequestMethod, RequestConfig, RequestQuickConfig, ResponseResult } from '../interface.uts'
+import type { InstanceCore } from './types'
+import { dispatchImpl } from './core'
+
+/**
+ * 将 url + method 并入请求级配置（config 为 null 时仅含 url / method）
+ */
+function withUrl(url: string, method: RequestMethod, config: RequestQuickConfig | null): RequestConfig {
+	if (config == null) {
+		const c: RequestConfig = { url: url, method: method }
+		return c
+	}
+	const c: RequestConfig = {
+		url: url,
+		method: method,
+		baseURL: config.baseURL,
+		params: config.params,
+		data: config.data,
+		header: config.header,
+		timeout: config.timeout,
+		dataType: config.dataType,
+		responseType: config.responseType,
+		enableQuic: config.enableQuic,
+		sslVerify: config.sslVerify,
+		withCredentials: config.withCredentials,
+		firstIpv4: config.firstIpv4,
+		enableChunked: config.enableChunked,
+		validateStatus: config.validateStatus,
+		cancelToken: config.cancelToken,
+		transformRequest: config.transformRequest,
+		transformResponse: config.transformResponse,
+		onTask: config.onTask
+	}
+	return c
+}
+
+/**
+ * 将 url + method + data 并入请求级配置（POST/PUT/PATCH 系）
+ */
+function withData(url: string, data: any | null, method: RequestMethod, config: RequestQuickConfig | null): RequestConfig {
+	if (config == null) {
+		const c: RequestConfig = { url: url, method: method, data: data }
+		return c
+	}
+	const c: RequestConfig = {
+		url: url,
+		method: method,
+		baseURL: config.baseURL,
+		params: config.params,
+		data: data,
+		header: config.header,
+		timeout: config.timeout,
+		dataType: config.dataType,
+		responseType: config.responseType,
+		enableQuic: config.enableQuic,
+		sslVerify: config.sslVerify,
+		withCredentials: config.withCredentials,
+		firstIpv4: config.firstIpv4,
+		enableChunked: config.enableChunked,
+		validateStatus: config.validateStatus,
+		cancelToken: config.cancelToken,
+		transformRequest: config.transformRequest,
+		transformResponse: config.transformResponse,
+		onTask: config.onTask
+	}
+	return c
+}
+
+/** GET */
+export function getImpl<T>(core: InstanceCore, url: string, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return dispatchImpl<T>(core, withUrl(url, 'GET', config))
+}
+
+/** DELETE（delete 为 UTS 保留字，别名 del） */
+export function delImpl<T>(core: InstanceCore, url: string, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return dispatchImpl<T>(core, withUrl(url, 'DELETE', config))
+}
+
+/** HEAD */
+export function headImpl<T>(core: InstanceCore, url: string, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return dispatchImpl<T>(core, withUrl(url, 'HEAD', config))
+}
+
+/** OPTIONS */
+export function optionsImpl<T>(core: InstanceCore, url: string, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return dispatchImpl<T>(core, withUrl(url, 'OPTIONS', config))
+}
+
+/** POST */
+export function postImpl<T>(core: InstanceCore, url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return dispatchImpl<T>(core, withData(url, data, 'POST', config))
+}
+
+/** PUT */
+export function putImpl<T>(core: InstanceCore, url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return dispatchImpl<T>(core, withData(url, data, 'PUT', config))
+}
+
+/** PATCH */
+export function patchImpl<T>(core: InstanceCore, url: string, data: any | null, config: RequestQuickConfig | null): Promise<ResponseResult<T>> {
+	return dispatchImpl<T>(core, withData(url, data, 'PATCH', config))
+}

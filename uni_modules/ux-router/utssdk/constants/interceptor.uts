@@ -1,0 +1,7 @@
+/**
+ * 需要拦截的 uni 导航 API 名称列表
+ *
+ * 拦截这些 API 的外部直接调用并转交路由器执行完整守卫链，
+ * 避免 `uni.navigateTo` 等绕过路由守卫。
+ */
+export const INTERCEPTED_APIS: string[] = ['navigateTo', 'redirectTo', 'switchTab', 'reLaunch', 'navigateBack']

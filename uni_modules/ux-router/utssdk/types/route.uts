@@ -1,0 +1,225 @@
+/**
+ * 路由核心类型定义
+ *
+ * 由于 uni-app x 采用静态 pages.json 页面模型（页面路径即路由路径），
+ * 此处将 vue-router 的 RouteRecord / RouteLocation 泛化为扁平记录，
+ * 但保持其对外 API 语义一致（path / name / query / params / meta / hash）。
+ */
+
+/** 查询参数值类型（uni-app x 中 query 统一以字符串在 URL 中传递） */
+export type QueryValue = string
+
+/**
+ * 路由名称
+ * H5/编辑器可经 RouteNameMap 模块增强推导字面量提示；
+ * 原生端 UTS 不支持 keyof 组合类型，退化为 string（配合 strict 校验兜底）
+ */
+// #ifdef WEB
+export type RouteName = keyof RouteNameMap & string
+// #else
+export type RouteName = string
+// #endif
+
+/** 路由路径（页面路径，带前导斜杠） */
+export type RoutePath = string
+
+/**
+ * 路由元信息
+ *
+ * 内置常见字段。UTS 不支持接口声明合并，自定义 meta 请直接在此处追加字段。
+ */
+export type RouteMeta = {
+	/** 页面标题 */
+	title?: string
+	/** 是否为 tabBar 页面（决定使用 switchTab 导航） */
+	isTab?: boolean
+	/** 是否要求登录（可由守卫据此拦截） */
+	requireAuth?: boolean
+}
+
+/** 路由参数对象（uni-app x：以 k/v 字符串承载，经本地存储传递） */
+export type ParamObject = Map<string, string>
+
+/** 导航重定向模式（守卫重定向时选择导航方式） */
+export type NavigationRedirectMode = 'push' | 'replace' | 'relaunch'
+
+/**
+ * 原始路由位置对象（push/replace 的目标描述）
+ */
+export type RawLocation = {
+	/** 目标路径（优先级高于 name） */
+	path?: string
+	/** 命名路由名 */
+	name?: string
+	/** 查询参数 */
+	query?: Map<string, string>
+	/** 路径/附加参数（uni-app x：经由本地存储传递的对象数据） */
+	params?: ParamObject
+	/** hash，保留字段（uni-app x 暂不支持，置空） */
+	hash?: string
+	/** 本次导航窗口过渡动画类型（单次覆盖，AnimationPlugin 消费） */
+	animationType?: string
+	/** 本次导航窗口过渡动画持续时间（ms，单次覆盖） */
+	animationDuration?: number
+	/**
+	 * 页面间通信监听表（事件名 → 回调，监听被打开页回传的数据，EventsPlugin 消费）
+	 * 对齐官方 uni.navigateTo 的 events 参数语义
+	 */
+	events?: Map<string, (data: any) => any>
+}
+
+/** 路由位置原始输入（字符串路径或对象位置） */
+export type RouteLocationRaw = string | RawLocation
+
+/** 命名路由输入（只允许 name 形式的对象） */
+export type RouteLocationNamedRaw = {
+	name: string
+	query?: Map<string, string>
+	params?: ParamObject
+	hash?: string
+	animationType?: string
+	animationDuration?: number
+	events?: Map<string, (data: any) => any>
+}
+
+/** 路径式路由输入（只允许 path 形式的对象） */
+export type RouteLocationPathRaw = {
+	path: string
+	query?: Map<string, string>
+	params?: ParamObject
+	hash?: string
+	animationType?: string
+	animationDuration?: number
+	events?: Map<string, (data: any) => any>
+}
+
+/** 导航重定向指令（守卫返回此对象以重定向到其他路由） */
+export type NavigationRedirect = {
+	/** 重定向目标位置 */
+	location: RouteLocationRaw
+	/** 重定向导航方式，默认沿用原始导航方式或 relaunch */
+	mode?: NavigationRedirectMode
+}
+
+/** 窗口过渡动画类型（对齐 uni-app x animationType；退出型用于 back 场景） */
+export type AnimationType =
+	| 'auto'
+	| 'none'
+	| 'slide-in-right'
+	| 'slide-in-left'
+	| 'slide-in-top'
+	| 'slide-in-bottom'
+	| 'slide-out-right'
+	| 'slide-out-left'
+	| 'slide-out-top'
+	| 'slide-out-bottom'
+	| 'fade-in'
+	| 'fade-out'
+	| 'zoom-in'
+	| 'zoom-out'
+	| 'zoom-fade-in'
+	| 'zoom-fade-out'
+	| 'pop-in'
+	| 'pop-out'
+
+/** 导航动画配置（全局默认或单次指定） */
+export type NavigationAnimation = {
+	/** 动画类型 */
+	type: AnimationType
+	/** 动画持续时间（ms，默认 300） */
+	duration?: number
+}
+
+/**
+ * 已解析并规范化的路由位置
+ * 对应 vue-router 中 useRoute() / currentRoute 返回的对象
+ */
+export type RouteLocation = {
+	/** 页面路径（带前导斜杠，如 /pages/index/index） */
+	path: string
+	/** 命名路由名（未命名时为 null） */
+	name: string | null
+	/** 路由元信息 */
+	meta: RouteMeta
+	/** 查询参数 */
+	query: Map<string, string>
+	/** 路由参数 */
+	params: Map<string, string>
+	/** 完整路径（path + 序列化 query） */
+	fullPath: string
+	/** hash（uni-app x 暂不支持，恒为空串） */
+	hash: string
+	/** 匹配到的路由记录（扁平模型下为单个 record 数组） */
+	matched: RouteConfig[]
+}
+
+/** 路由配置记录（uni-app x 中 path 须与 pages.json 注册一致） */
+export type RouteConfig = {
+	/** 页面路径（与 pages.json 一致，如 pages/index/index） */
+	path: string
+	/** 命名路由名（用于按名导航） */
+	name?: string
+	/** 重定向目标（未提供 component 时对本路径直接重定向） */
+	redirect?: RouteLocationRaw
+	/** 路由元信息 */
+	meta?: RouteMeta
+	/** 路由独享前置守卫 */
+	beforeEnter?: NavigationGuard | NavigationGuard[]
+}
+
+/** 导航结果（uni-app x：push 完成后返回目标路由位置） */
+export type NavigationResult = RouteLocation
+
+/** 路由名称映射（供模块增强：declare module { interface RouteNameMap {...} }） */
+export interface RouteNameMap {}
+
+/* -------------------------------------------------------------------------- */
+/* 导航守卫类型（统一在此定义，供 route / guard / composables 单向引用，避免环依赖） */
+/* -------------------------------------------------------------------------- */
+
+/** 守卫返回的对象位置形式 */
+export type RawLocationLike = {
+	path?: string
+	name?: string
+	query?: Map<string, string>
+	params?: Map<string, string>
+}
+
+/** 守卫返回结果类型（null 表示放行；不留 undefined，符合 UTS 可空语义） */
+export type NavigationGuardReturn =
+	| boolean
+	| string
+	| RawLocationLike
+	| NavigationRedirect
+	| Error
+	| null
+
+/** 全局前置 / 解析守卫（beforeEach / beforeResolve）
+ * 注意：返回类型放宽为 any —— 守卫返回值是多类型联合（boolean|string|位置对象|重定向|null），
+ * 非蒸汽（Kotlin/Swift）模式下需避免函数型变不匹配（Boolean? 无法赋给 union 生成的 Any）。 */
+export type NavigationGuard = (to: RouteLocation, from: RouteLocation) => any
+
+/** 全局后置守卫（afterEach），可接收失败信息（UTS 函数类型参数不可选，用显式可空） */
+export type PostNavigationGuard = (
+	to: RouteLocation,
+	from: RouteLocation,
+	failure: Error | null
+) => void
+
+/** 组件内进入守卫（onBeforeRouteEnter） */
+export type BeforeRouteEnterGuard = (
+	to: RouteLocation,
+	from: RouteLocation
+) => NavigationGuardReturn | Promise<NavigationGuardReturn>
+
+/** 组件内更新守卫（onBeforeRouteUpdate） */
+export type BeforeRouteUpdateGuard = (
+	to: RouteLocation,
+	from: RouteLocation
+) => NavigationGuardReturn | Promise<NavigationGuardReturn>
+
+/** 组件内离开守卫（onBeforeRouteLeave） */
+export type BeforeRouteLeaveGuard = (
+	to: RouteLocation,
+	from: RouteLocation
+) => NavigationGuardReturn | Promise<NavigationGuardReturn>

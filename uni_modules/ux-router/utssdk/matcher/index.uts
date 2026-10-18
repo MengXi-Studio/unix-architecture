@@ -1,0 +1,17 @@
+/**
+ * 路由匹配器实现
+ */
+import { RouteMatcher } from './type'
+import type { RouteConfig } from '../types'
+
+export type { RouteMatcher } from './type'
+
+/**
+ * 创建路由匹配器
+ * @param routes - 路由配置列表
+ * @param strict - 是否严格模式（未匹配的命名路由抛错）
+ * @returns 路由匹配器实例
+ */
+export function createRouteMatcher(routes: RouteConfig[], strict: boolean): RouteMatcher {
+	return new RouteMatcher(routes, strict)
+}

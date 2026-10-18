@@ -1,0 +1,17 @@
+/**
+ * 默认实例全局默认配置（configureRequest）
+ *
+ * defaults 存储统一挂在 InstanceCore 上（instance.uts 持有 defaultCore），
+ * 本模块仅作为入口 API 的适配层；多实例通过 instance.setConfig 修改各自
+ * 的 defaults，与默认实例天然隔离。
+ */
+import type { RequestDefaults } from '../../interface.uts'
+import { defaultCore, setCoreDefaults } from '../instance'
+
+/**
+ * 设置默认实例全局默认配置
+ * @param defaults 默认值（字段为 null 表示沿用内置默认，normalize 层兜底）
+ */
+export function configureRequestImpl(defaults: RequestDefaults): void {
+	setCoreDefaults(defaultCore, defaults)
+}

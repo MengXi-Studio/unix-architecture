@@ -1,0 +1,55 @@
+/**
+ * useLink 组合式 API
+ *
+ * 返回响应式目标路由、激活态与导航函数，供 RouterLink 组件或模板直接使用。
+ */
+import { computed } from 'vue'
+import type { ComputedRef } from 'vue'
+import type { UseLinkOptions, UseLinkReturn, RouteLocation } from '../types'
+import { useRouter } from './router'
+
+/**
+ * 创建链接响应状态
+ * @param options - useLink 选项
+ * @returns 链接响应状态
+ */
+export function useLink(options: UseLinkOptions): UseLinkReturn {
+	const router = useRouter()
+
+	/** 解析后的目标路由 */
+	const route: ComputedRef<RouteLocation> = computed(() => router.resolve(options.to))
+
+	/** 目标 href（完整路径） */
+	const href: ComputedRef<string> = computed(() => route.value.fullPath)
+
+	/** 是否为当前精确激活路由（页面路径相等） */
+	const isExactActive: ComputedRef<boolean> = computed(() => router.currentRoute.path === route.value.path)
+
+	/** 是否为当前激活路由（扁平模型下路径前缀匹配，等效精确匹配） */
+	const isActive: ComputedRef<boolean> = computed(() => {
+		const current = router.currentRoute.path
+		const target = route.value.path
+		return current === target || current.startsWith(target + '/')
+	})
+
+	/** 执行导航函数 */
+	const navigate = async (): Promise<RouteLocation | null> => {
+		if (options.relaunch === true) {
+			await router.relaunch(options.to)
+			return null
+		}
+		if (options.replace === true) {
+			await router.replace(options.to)
+			return null
+		}
+		return router.push(options.to)
+	}
+
+	return {
+		route,
+		isActive,
+		isExactActive,
+		href,
+		navigate
+	}
+}

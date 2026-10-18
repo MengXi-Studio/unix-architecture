@@ -1,0 +1,9 @@
+/**
+ * 内部保留 key 前缀
+ *
+ * uni-app x 静态页面模型不支持路径参数，vue-router 风格的 params
+ * 由 ParamsPlugin 通过「__params_key 关联存储」在页面间传递（见 plugins/params）。
+ */
+
+/** params 持久化存储 key 前缀（存储于 uni storage） */
+export const PARAMS_STORAGE_PREFIX: string = 'unixr_params_'

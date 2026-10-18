@@ -1,0 +1,86 @@
+/**
+ * TTL 三级合并 + 过期清理全量扫描
+ */
+import type { StorageError } from '../interface.uts'
+import { getStorageRaw, removeStorageRaw } from './adapter'
+import { detectRecord, isRecordExpired } from './record'
+
+/**
+ * TTL 三级回退：调用级 ttl → 实例 defaultTTL → 内置默认（null = 永不过期）
+ */
+export function resolveTTL(ttl: number | null, defaultTTL: number | null): number | null {
+	if (ttl != null) {
+		return ttl
+	}
+	return defaultTTL
+}
+
+/** 由 TTL 计算过期时间戳（毫秒）；ttl 为 null = 永不过期 */
+export function computeExpire(ttl: number | null): number | null {
+	if (ttl == null) {
+		return null
+	}
+	return Date.now() + ttl
+}
+
+/**
+ * 全量扫描清理已过期记录（keys 为已含前缀的命名空间 key 列表）
+ *
+ * 顺序逐 key：读原值 → record 探测 → 过期判断 → 命中则移除。
+ * 顶层函数递归推进（规避闭包自引用 / 计数器捕获的 Kotlin 转译风险）。
+ *
+ * @returns 清理条数；任一底层操作失败整体 reject
+ */
+export function clearExpiredInKeys(keys: Array<string>): Promise<number> {
+	return new Promise<number>((resolve, reject) => {
+		const state: ExpireScanState = {
+			total: keys.length,
+			done: 0,
+			removed: 0,
+			keys: keys
+		}
+		scanNext(state, (): void => {
+			resolve(state.removed)
+		}, (e: StorageError): void => {
+			reject(e)
+		})
+	})
+}
+
+/** 扫描推进状态（字段可变，递归间共享） */
+type ExpireScanState = {
+	/** 待扫描 key 总数 */
+	total: number
+	/** 已完成扫描数 */
+	done: number
+	/** 已清理条数 */
+	removed: number
+	/** 待扫描 key 列表（含前缀） */
+	keys: Array<string>
+}
+
+/** 扫描链式推进（未命中 / 非本库格式直接跳过，Q5 语义不误删外部数据） */
+function scanNext(state: ExpireScanState, onDone: () => void, onFail: (e: StorageError) => void): void {
+	if (state.done >= state.total) {
+		onDone()
+		return
+	}
+	const key = state.keys[state.done]
+	getStorageRaw(key).then((raw: any | null): void => {
+		const record = detectRecord(raw)
+		if (record == null || !isRecordExpired(record)) {
+			state.done = state.done + 1
+			scanNext(state, onDone, onFail)
+			return
+		}
+		state.removed = state.removed + 1
+		removeStorageRaw(key).then((): void => {
+			state.done = state.done + 1
+			scanNext(state, onDone, onFail)
+		}).catch((e: any | null): void => {
+			onFail(e as StorageError)
+		})
+	}).catch((e: any | null): void => {
+		onFail(e as StorageError)
+	})
+}

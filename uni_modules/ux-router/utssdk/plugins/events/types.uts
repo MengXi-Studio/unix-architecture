@@ -1,0 +1,64 @@
+/**
+ * EventsPlugin 类型与工具
+ *
+ * 事件监听表以 Map<事件名, 回调> 承载（对齐官方 events 语义）；
+ * 通道 key 经导航 URL 查询串（__evt__）跨页桥接。
+ */
+import type { RouteLocationRaw, RawLocation } from '../../types'
+import { getCurrentPageQuery } from '../../navigation/context'
+
+/** 事件监听表（事件名 → 回调，监听被打开页回传的数据；UTS 函数类型参数不支持 rest，用单参数形式） */
+export type EventsMap = Map<string, (data: any) => any>
+
+/** 导航 URL 查询串中承载「通道 key」的内部键（状态同步时会被 stripInternalKeys 剔除） */
+export const EVT_QUERY_KEY: string = '__evt__'
+
+/** 插件数据中「本次导航通道 key」的存储键 */
+export const CHANNEL_DATA_KEY: string = 'events_channel'
+
+/**
+ * 从原始路由位置读取 events 监听表（无则返回 null）
+ * @param location - push/replace 的目标位置（可空 / 字符串）
+ */
+export function pickEvents(location: RouteLocationRaw | null): EventsMap | null {
+	if (location === null || typeof location === 'string') {
+		return null
+	}
+	const raw = location as RawLocation
+	// H5 端可选字段缺省为 undefined（非 null），统一归一化后判断
+	const events: EventsMap | null = raw.events ?? null
+	if (events === null || events.size === 0) {
+		return null
+	}
+	return events as EventsMap
+}
+
+/* -------------------------------------------------------------------------- */
+/* 当前页「打开方通道 key」存取（routeSync 写入，useOpenerEventChannel 读取）   */
+/* -------------------------------------------------------------------------- */
+
+/** 当前页面对应的打开方通道 key（useOpenerEventChannel 消费；无通道时为 null） */
+let currentChannelKey: string | null = null
+
+/** routeSync 时写入当前页的通道 key（无通道时置 null） */
+export function setCurrentChannelKey(key: string | null): void {
+	currentChannelKey = key
+}
+
+/** 读取当前页通道 key（无通道时返回 null） */
+export function getCurrentChannelKey(): string | null {
+	return currentChannelKey
+}
+
+/**
+ * 从当前页面 URL 查询串读取「打开方通道 key」（__evt__）
+ * 页面 onLoad/onShow 执行早于路由状态同步（onRouteSync 才写内存 key），
+ * 故 useOpenerEventChannel 需按当前页直接兜底读取。无则返回 null。
+ */
+export function getCurrentPageEventKey(): string | null {
+	const key = getCurrentPageQuery().get(EVT_QUERY_KEY)
+	if (key === null || key.length === 0) {
+		return null
+	}
+	return key
+}

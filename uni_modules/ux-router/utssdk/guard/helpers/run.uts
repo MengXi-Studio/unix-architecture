@@ -1,0 +1,95 @@
+/**
+ * 守卫执行与队列运行
+ */
+import type { NavigationGuard, PostNavigationGuard, RouteConfig, RouteLocation } from '../../types'
+import { warn } from '../../utils'
+import { RouterErrorCode } from '../../enums'
+import type { GuardResult } from '../type'
+import { resolveGuardReturn } from './resolve'
+
+/**
+ * 执行单个守卫并解析结果
+ * @param guard - 守卫函数
+ * @param to - 目标路由
+ * @param from - 来源路由
+ * @param timeout - 超时（毫秒），0 禁用
+ * @returns 守卫执行结果
+ */
+export async function runGuard(guard: NavigationGuard, to: RouteLocation, from: RouteLocation, timeout: number): Promise<GuardResult> {
+	try {
+		const raw = guard(to, from)
+		let value = raw
+		if (timeout > 0) {
+			value = await withTimeout(Promise.resolve(raw), timeout, to)
+		} else {
+			value = await Promise.resolve(raw)
+		}
+		return resolveGuardReturn(value, to)
+	} catch (e) {
+		const err = e instanceof Error ? e : new Error(`${e}`)
+		return { kind: 'abort', code: RouterErrorCode.CANCELLED, error: err }
+	}
+}
+
+/**
+ * 顺序执行守卫队列，遇到非 next 结果即提前中止
+ * @param guards - 守卫数组
+ * @param to - 目标路由
+ * @param from - 来源路由
+ * @param timeout - 超时（毫秒）
+ * @returns 首个非 next 结果或全部放行时的 next
+ */
+export async function runGuardQueue(guards: NavigationGuard[], to: RouteLocation, from: RouteLocation, timeout: number): Promise<GuardResult> {
+	for (var i = 0; i < guards.length; i++) {
+		const result = await runGuard(guards[i], to, from, timeout)
+		if (result.kind !== 'next') {
+			return result
+		}
+	}
+	return { kind: 'next' }
+}
+
+/**
+ * 执行路由独享守卫（beforeEnter，可为单函数或数组）
+ */
+export async function runBeforeEnterGuards(config: RouteConfig, to: RouteLocation, from: RouteLocation, timeout: number): Promise<GuardResult> {
+	const beforeEnter = config.beforeEnter
+	if (beforeEnter == null) {
+		return { kind: 'next' }
+	}
+	const list: NavigationGuard[] = Array.isArray(beforeEnter) ? beforeEnter : [beforeEnter]
+	return runGuardQueue(list, to, from, timeout)
+}
+
+/**
+ * 触发全部后置守卫（不参与导航流程控制），异常被隔离
+ */
+export function runAfterGuards(guards: PostNavigationGuard[], to: RouteLocation, from: RouteLocation, failure: Error | null = null): void {
+	for (var i = 0; i < guards.length; i++) {
+		try {
+			guards[i](to, from, failure)
+		} catch (e) {
+			console.warn('[unix-router] afterEach 守卫执行异常: ' + `${e}`)
+		}
+	}
+}
+
+/** 带超时的 Promise 辅助：超时则告警并返回 abort */
+function withTimeout<T>(promise: Promise<T>, timeout: number, to: RouteLocation): Promise<T> {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			warn(`导航守卫执行超过 ${timeout}ms，正在中止导航: ${to.fullPath}`)
+			reject(new Error(`导航守卫超时: ${to.path}`))
+		}, timeout)
+		promise.then(
+			value => {
+				clearTimeout(timer)
+				resolve(value)
+			},
+			(err: any) => {
+				clearTimeout(timer)
+				reject(err)
+			}
+		)
+	})
+}

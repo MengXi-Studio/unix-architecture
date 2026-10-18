@@ -1,0 +1,16 @@
+/**
+ * useRoute 组合式 API
+ *
+ * 返回全局活跃路由位置的响应式对象。在路由器导航与状态同步时会自动更新，
+ * 脚本中可直接访问 route.path / route.query 等字段（与 vue-router 语义一致）。
+ */
+import type { RouteLocation } from '../types'
+import { currentRoute } from '../store'
+
+/**
+ * 获取当前响应式路由
+ * @returns 响应式 RouteLocation 对象（可直接访问字段，模板中同样可用）
+ */
+export function useRoute(): RouteLocation {
+	return currentRoute
+}

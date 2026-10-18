@@ -1,0 +1,25 @@
+/**
+ * 库内置默认值常量（仅供内部归一化回退使用）
+ *
+ * 命名红线：插件内所有 .uts 同 Kotlin package，与入口 index.uts 对外
+ * 常量（DEFAULT_* / STORAGE_*）同名会触发导出符号静默重整（__1），故
+ * 内部常量一律 BUILTIN_ 前缀，值须与入口内联字面量保持一致。
+ */
+
+/** 内置默认 key 前缀（规避 uni- / dcloud_ 平台保留前缀） */
+export const BUILTIN_KEY_PREFIX: string = 'mx_storage:'
+
+/** 内置默认 TTL（毫秒）；null = 永不过期 */
+export const BUILTIN_DEFAULT_TTL: number | null = null
+
+/** 统一错误 errSubject（StorageError.errSubject 固定值；与入口 STORAGE_ERR_SUBJECT 同值） */
+export const BUILTIN_ERR_SUBJECT: string = 'unix-storage'
+
+/** 平台保留前缀一（uni- 开头） */
+export const BUILTIN_RESERVED_PREFIX_UNI: string = 'uni-'
+
+/** 平台保留前缀二（dcloud_ 开头） */
+export const BUILTIN_RESERVED_PREFIX_DCLOUD: string = 'dcloud_'
+
+/** 原生「数据不存在」fail errMsg 特征（uni.getStorage 对不存在 key 走 fail） */
+export const BUILTIN_NOT_FOUND_MARK: string = 'data not found'

@@ -7,16 +7,16 @@
 
 /** 应用配置结构 */
 export type AppSettings = {
-	/** 应用名（登录页标题等） */
-	appName: string
-	/** 后端服务地址（当前指向本地 mock，接真实后端时替换） */
-	baseURL: string
-	/** 请求超时（毫秒） */
-	timeout: number
+  /** 应用名（登录页标题等） */
+  appName: string
+  /** 后端服务地址（当前指向本地 mock，接真实后端时替换） */
+  baseURL: string
+  /** 请求超时（毫秒） */
+  timeout: number
 }
 
 export const settings: AppSettings = {
-	appName: 'unix-architecture',
-	baseURL: 'http://127.0.0.1:3210',
-	timeout: 15000
+  appName: 'unix-architecture',
+  baseURL: 'http://127.0.0.1:3210',
+  timeout: 15000
 }

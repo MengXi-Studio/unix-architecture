@@ -16,16 +16,19 @@ let initialized = false
 
 /** 错误码 → 用户可读文案 */
 function friendlyMessage(err: RequestError): string {
-	if (err.code == 'ERR_TIMEOUT') {
-		return '请求超时，请稍后重试'
-	}
-	if (err.code == 'ERR_NETWORK') {
-		return '网络连接失败，请检查网络'
-	}
-	if (err.statusCode != null) {
-		return '服务异常（' + err.statusCode!.toString() + '）'
-	}
-	return '请求失败，请稍后重试'
+  if (err.code == 'ERR_TIMEOUT') {
+    return '请求超时，请稍后重试'
+  }
+
+  if (err.code == 'ERR_NETWORK') {
+    return '网络连接失败，请检查网络'
+  }
+
+  if (err.statusCode != null) {
+    return '服务异常（' + err.statusCode!.toString() + '）'
+  }
+
+  return '请求失败，请稍后重试'
 }
 
 /**
@@ -33,43 +36,48 @@ function friendlyMessage(err: RequestError): string {
  * 幂等：重复调用直接跳过
  */
 export function initRequest(): void {
-	if (initialized) {
-		return
-	}
-	initialized = true
+  if (initialized) {
+    return
+  }
 
-	// 全局默认配置（null 字段沿用库内置默认）
-	configureRequest({
-		baseURL: settings.baseURL,
-		timeout: settings.timeout,
-		header: { 'Content-Type': 'application/json' } as UTSJSONObject,
-		validateStatus: null
-	})
+  initialized = true
 
-	// 请求拦截器：注入鉴权头（token 经 utils/auth.uts 提供；请求级同名键可覆盖）
-	useRequestInterceptor((config: RequestConfig): RequestConfig => {
-		const token = getToken()
-		if (token != null && token!.length > 0) {
-			let header = {} as UTSJSONObject
-			if (config.header != null) {
-				header = config.header!
-			}
-			header['Authorization'] = 'Bearer ' + token!
-			config.header = header
-		}
-		return config
-	})
+  // 全局默认配置（null 字段沿用库内置默认）
+  configureRequest({
+    baseURL: settings.baseURL,
+    timeout: settings.timeout,
+    header: { 'Content-Type': 'application/json' } as UTSJSONObject,
+    validateStatus: null
+  })
 
-	// 响应拦截器：统一错误提示（主动取消不打扰用户）；
-	// 返回 null 放行，错误继续 reject 给调用方做业务处理
-	useResponseInterceptor(null, (err: RequestError): any | null => {
-		if (err.code != 'ERR_CANCELED') {
-			uni.showToast({
-				title: friendlyMessage(err),
-				icon: 'none'
-			})
-		}
-		console.error('[request] 请求失败：' + err.code + ' ' + err.errMsg)
-		return null
-	})
+  // 请求拦截器：注入鉴权头（token 经 utils/auth.uts 提供；请求级同名键可覆盖）
+  useRequestInterceptor((config: RequestConfig): RequestConfig => {
+    const token = getToken()
+
+    if (token != null && token!.length > 0) {
+      let header = {} as UTSJSONObject
+      if (config.header != null) {
+        header = config.header!
+      }
+
+      header['Authorization'] = 'Bearer ' + token!
+      config.header = header
+    }
+
+    return config
+  })
+
+  // 响应拦截器：统一错误提示（主动取消不打扰用户）；
+  // 返回 null 放行，错误继续 reject 给调用方做业务处理
+  useResponseInterceptor(null, (err: RequestError): any | null => {
+    if (err.code != 'ERR_CANCELED') {
+      uni.showToast({
+        title: friendlyMessage(err),
+        icon: 'none'
+      })
+    }
+
+    console.error('[request] 请求失败：' + err.code + ' ' + err.errMsg)
+    return null
+  })
 }

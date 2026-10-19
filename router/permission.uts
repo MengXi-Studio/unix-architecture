@@ -17,64 +17,72 @@ const whiteList: string[] = ['/pages/login/login']
 
 /** 构造重定向登录页指令（redirect 仅记 path：fullPath 含 query 需编码，骨架从简） */
 function toLogin(redirectPath: string): NavigationRedirect {
-	const location: RawLocation = {
-		path: '/pages/login/login',
-		query: new Map<string, string>([['redirect', redirectPath]])
-	}
-	const redirect: NavigationRedirect = { location: location }
-	return redirect
+  const location: RawLocation = {
+    path: '/pages/login/login',
+    query: new Map<string, string>([['redirect', redirectPath]])
+  }
+
+  const redirect: NavigationRedirect = { location: location }
+
+  return redirect
 }
 
 /** 构造回首页重定向指令 */
 function toHome(): NavigationRedirect {
-	const location: RawLocation = { name: 'index' }
-	const redirect: NavigationRedirect = { location: location }
-	return redirect
+  const location: RawLocation = { name: 'index' }
+  const redirect: NavigationRedirect = { location: location }
+
+  return redirect
 }
 
 /**
  * 鉴权守卫（async：ux-router 守卫链支持 await Promise 返回值）
  */
 const authGuard = async (to: RouteLocation, from: RouteLocation): Promise<boolean | NavigationRedirect> => {
-	// 等待持久层 token 恢复（仅冷启动首跳有实际耗时）
-	await ensureAuthReady()
+  // 等待持久层 token 恢复（仅冷启动首跳有实际耗时）
+  await ensureAuthReady()
 
-	const token = getToken()
-	const hasToken = token != null && token!.length > 0
+  const token = getToken()
+  const hasToken = token != null && token!.length > 0
 
-	if (hasToken) {
-		if (to.path == '/pages/login/login') {
-			return toHome()
-		}
-		const userStore = useUserStore()
-		if (userStore.name.value.length > 0) {
-			return true
-		}
-		try {
-			await userStore.getInfoAction()
-			return true
-		} catch (e) {
-			// 拉取信息失败：清登录态回登录页重新认证
-			userStore.resetToken()
-			console.error('[permission] getInfo 失败：' + `${e}`)
-			return toLogin(to.path)
-		}
-	}
+  if (hasToken) {
+    if (to.path == '/pages/login/login') {
+      return toHome()
+    }
 
-	if (whiteList.indexOf(to.path) >= 0) {
-		return true
-	}
-	return toLogin(to.path)
+    const userStore = useUserStore()
+    if (userStore.name.value.length > 0) {
+      return true
+    }
+
+    try {
+      await userStore.getInfoAction()
+
+      return true
+    } catch (e) {
+      // 拉取信息失败：清登录态回登录页重新认证
+      userStore.resetToken()
+      console.error('[permission] getInfo 失败：' + `${e}`)
+
+      return toLogin(to.path)
+    }
+  }
+
+  if (whiteList.indexOf(to.path) >= 0) {
+    return true
+  }
+
+  return toLogin(to.path)
 }
 
 /**
  * 注册守卫与冷启动补跑（main.uts createApp 内调用一次）
  */
 export function setupPermission(): void {
-	router.beforeEach(authGuard)
+  router.beforeEach(authGuard)
 
-	// 冷启动补跑守卫链：无 token 时守卫返回 redirect，自动 relaunch 至登录页
-	router.isReady().then(() => {
-		router.guardRoute()
-	})
+  // 冷启动补跑守卫链：无 token 时守卫返回 redirect，自动 relaunch 至登录页
+  router.isReady().then(() => {
+    router.guardRoute()
+  })
 }

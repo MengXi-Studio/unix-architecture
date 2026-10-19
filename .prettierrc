@@ -1,8 +1,7 @@
 {
-  "enable": true,
   "printWidth": 220,
   "tabWidth": 2,
-  "useTabs": true,
+  "useTabs": false,
   "semi": false,
   "singleQuote": true,
   "quoteProps": "as-needed",
@@ -12,5 +11,19 @@
   "endOfLine": "lf",
   "vueIndentScriptAndStyle": false,
   "proseWrap": "always",
-  "bracketSameLine": true
+  "bracketSameLine": true,
+  "overrides": [
+    {
+      "files": "*.uvue",
+      "options": {
+        "parser": "vue"
+      }
+    },
+    {
+      "files": "*.uts",
+      "options": {
+        "parser": "typescript"
+      }
+    }
+  ]
 }

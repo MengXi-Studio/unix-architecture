@@ -6,13 +6,13 @@
 import type { RouteConfig, RouteMeta } from '@/uni_modules/ux-router/utssdk/index.uts'
 
 export const routes: RouteConfig[] = [
-	{
-		path: 'pages/index/index',
-		name: 'index'
-	},
-	{
-		path: 'pages/login/login',
-		name: 'login',
-		meta: { title: '登录' }
-	}
+  {
+    path: 'pages/index/index',
+    name: 'index'
+  },
+  {
+    path: 'pages/login/login',
+    name: 'login',
+    meta: { title: '登录' }
+  }
 ]

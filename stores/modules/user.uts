@@ -10,57 +10,52 @@ import type { Ref } from 'vue'
 import { defineStore } from '@/uni_modules/ux-pinia'
 import { login, getInfo, logout } from '@/api/user.uts'
 import { setToken as persistToken, removeToken as clearPersistedToken } from '@/utils/auth.uts'
-
-export type UserStore = {
-	token: Ref<string>
-	name: Ref<string>
-	avatar: Ref<string>
-	loginAction: (username: string, password: string) => Promise<void>
-	getInfoAction: () => Promise<void>
-	logoutAction: () => Promise<void>
-	resetToken: () => void
-}
+import type { UserStore } from '../types.uts'
 
 export const useUserStore = defineStore<UserStore>('user', (): UserStore => {
-	const token: Ref<string> = ref('')
-	const name: Ref<string> = ref('')
-	const avatar: Ref<string> = ref('')
+  const token: Ref<string> = ref('')
+  const name: Ref<string> = ref('')
+  const avatar: Ref<string> = ref('')
 
-	/** 登录：成功后 token 写入 store 与持久层 */
-	const loginAction = async (username: string, password: string): Promise<void> => {
-		const res = await login(username, password)
-		const t = res.data['token'] as string
-		token.value = t
-		persistToken(t)
-	}
+  /** 登录：成功后 token 写入 store 与持久层 */
+  const loginAction = async (username: string, password: string): Promise<void> => {
+    const dto = await login(username, password)
 
-	/** 拉取用户信息 */
-	const getInfoAction = async (): Promise<void> => {
-		const res = await getInfo()
-		name.value = res.data['name'] as string
-		avatar.value = res.data['avatar'] as string
-	}
+    token.value = dto.token
+    persistToken(dto.token)
+  }
 
-	/** 退出登录：调接口后强制清本地状态（接口失败不阻断退出） */
-	const logoutAction = async (): Promise<void> => {
-		try {
-			await logout()
-		} catch (e) {
-			console.warn('[store:user] logout 接口失败，仍执行本地清理：' + `${e}`)
-		}
-		token.value = ''
-		name.value = ''
-		avatar.value = ''
-		clearPersistedToken()
-	}
+  /** 拉取用户信息 */
+  const getInfoAction = async (): Promise<void> => {
+    const dto = await getInfo()
 
-	/** 仅清本地登录态（守卫 getInfo 失败路径使用，对标 user/resetToken） */
-	const resetToken = (): void => {
-		token.value = ''
-		name.value = ''
-		avatar.value = ''
-		clearPersistedToken()
-	}
+    name.value = dto.name
+    avatar.value = dto.avatar
+  }
 
-	return { token, name, avatar, loginAction, getInfoAction, logoutAction, resetToken } as UserStore
+  /** 退出登录：调接口后强制清本地状态（接口失败不阻断退出） */
+  const logoutAction = async (): Promise<void> => {
+    try {
+      await logout()
+    } catch (e) {
+      console.warn('[store:user] logout 接口失败，仍执行本地清理：' + `${e}`)
+    }
+
+    token.value = ''
+    name.value = ''
+    avatar.value = ''
+
+    clearPersistedToken()
+  }
+
+  /** 仅清本地登录态（守卫 getInfo 失败路径使用，对标 user/resetToken） */
+  const resetToken = (): void => {
+    token.value = ''
+    name.value = ''
+    avatar.value = ''
+
+    clearPersistedToken()
+  }
+
+  return { token, name, avatar, loginAction, getInfoAction, logoutAction, resetToken } as UserStore
 })

@@ -1,0 +1,17 @@
+/**
+ * 用户 store 类型定义（stores/types/ 目录，stores 域类型唯一事实源）
+ *
+ * 与 api/types/ 同构：域内类型集中定义，经 stores/types.uts 聚合出口消费，
+ * 模块实现（modules/*.uts）与未来消费方（页面 / composables）统一从出口导入。
+ */
+import type { Ref } from 'vue'
+
+export type UserStore = {
+  token: Ref<string>
+  name: Ref<string>
+  avatar: Ref<string>
+  loginAction: (username: string, password: string) => Promise<void>
+  getInfoAction: () => Promise<void>
+  logoutAction: () => Promise<void>
+  resetToken: () => void
+}

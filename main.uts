@@ -5,13 +5,13 @@ import { initRequest } from '@/utils/request.uts'
 import { setupPermission } from './router/permission.uts'
 
 export function createApp() {
-	const app = createSSRApp(App)
+  const app = createSSRApp(App)
 
-	app.use(router)
-	initRequest()
-	setupPermission()
+  app.use(router)
+  initRequest()
+  setupPermission()
 
-	return {
-		app
-	}
+  return {
+    app
+  }
 }

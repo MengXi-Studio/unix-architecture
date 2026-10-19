@@ -1,0 +1,6 @@
+/**
+ * toast 常量桶文件
+ */
+export { BUILTIN_DURATION, BUILTIN_ICON, BUILTIN_MASK } from './defaults'
+export { WECHAT_TITLE_MAX_LENGTH, NATIVE_TITLE_MAX_LENGTH } from './limits'
+export { TOAST_ERR_SUBJECT } from './keys'

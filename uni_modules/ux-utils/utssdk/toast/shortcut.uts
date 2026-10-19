@@ -1,0 +1,46 @@
+/**
+ * 语义化快捷 API：降低调用侧心智
+ */
+import type { ToastIcon } from './enums'
+import type { ToastOptions } from './types'
+import { showToastImpl } from './show-toast'
+import { getToastDefaults } from './config'
+import { BUILTIN_DURATION, BUILTIN_MASK } from './constants'
+
+/**
+ * 内部：以指定图标快速展示 toast
+ * @param title 提示文本
+ * @param icon 图标
+ */
+function quickShow(title: string, icon: ToastIcon): void {
+	const defaults = getToastDefaults()
+	const duration: number = defaults.duration != null ? defaults.duration : BUILTIN_DURATION
+	const mask: boolean = defaults.mask != null ? defaults.mask : BUILTIN_MASK
+	const options: ToastOptions = {
+		title: title,
+		icon: icon,
+		image: null,
+		mask: mask,
+		duration: duration,
+		position: null,
+		success: null,
+		fail: null,
+		complete: null
+	}
+	showToastImpl(options)
+}
+
+/** 展示成功提示 */
+export function showToastSuccessImpl(title: string): void {
+	quickShow(title, 'success')
+}
+
+/** 展示错误提示 */
+export function showToastErrorImpl(title: string): void {
+	quickShow(title, 'error')
+}
+
+/** 展示信息提示（无图标） */
+export function showToastInfoImpl(title: string): void {
+	quickShow(title, 'none')
+}

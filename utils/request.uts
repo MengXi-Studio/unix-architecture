@@ -10,6 +10,7 @@ import { configureRequest, useRequestInterceptor, useResponseInterceptor } from 
 import type { RequestConfig, RequestError } from '@/uni_modules/mx-request'
 import { settings } from '@/config/index.uts'
 import { getToken } from '@/utils/auth.uts'
+import { showToast } from '@/uni_modules/ux-utils'
 
 /** 是否已完成初始化（防止拦截器重复注册导致双重提示） */
 let initialized = false
@@ -71,7 +72,7 @@ export function initRequest(): void {
   // 返回 null 放行，错误继续 reject 给调用方做业务处理
   useResponseInterceptor(null, (err: RequestError): any | null => {
     if (err.code != 'ERR_CANCELED') {
-      uni.showToast({
+      showToast({
         title: friendlyMessage(err),
         icon: 'none'
       })

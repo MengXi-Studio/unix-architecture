@@ -1,0 +1,141 @@
+/**
+ * toast 参数归一化（纯函数，可单测）
+ *
+ * 职责：
+ * - 按端填充默认值（duration / icon / mask）
+ * - 功能层抹平：icon 别名归一化、position 降级、image gif 降级、title 截断
+ * - 记录发生降级的参数名，由调用侧统一回调 fail（PLATFORM_UNSUPPORTED）
+ *
+ * 通道划分（v0.6）：自绘 = App-Android / App-iOS / Web；原生 = 微信 / 鸿蒙
+ */
+import type { ToastIcon, ToastPosition } from '../enums'
+import type { ToastOptions, NormalizedOptions, NormalizeResult } from '../types'
+import {
+	BUILTIN_DURATION,
+	BUILTIN_ICON,
+	BUILTIN_MASK,
+	WECHAT_TITLE_MAX_LENGTH,
+	NATIVE_TITLE_MAX_LENGTH
+} from '../constants'
+import { getToastDefaults } from '../config'
+import { getPlatform, isSelfDrawPlatform } from './platform'
+
+/**
+ * 截断标题：按端策略
+ * - 微信：icon=success/loading 时最多 7 汉字
+ * - 其他原生通道端（app-harmony）：20 字 + 省略号
+ * - 自绘通道（App / Web）：不截断，由 CSS 多行显示
+ */
+function truncateTitle(title: string, platform: string): string {
+	if (platform === 'mp-weixin') {
+		if (title.length > WECHAT_TITLE_MAX_LENGTH) {
+			return title.substring(0, WECHAT_TITLE_MAX_LENGTH) + '…'
+		}
+		return title
+	}
+	if (platform === 'app-harmony') {
+		if (title.length > NATIVE_TITLE_MAX_LENGTH) {
+			return title.substring(0, NATIVE_TITLE_MAX_LENGTH) + '…'
+		}
+	}
+	return title
+}
+
+/**
+ * 归一化 icon
+ * - fail / exception：本期范围（五端）不含支付宝/抖音，统一降级为 error
+ * - warning：仅自绘通道支持，原生端降级为 none
+ */
+function normalizeIcon(
+	icon: ToastIcon,
+	platform: string,
+	degraded: string[]
+): ToastIcon {
+	if (icon === 'fail' || icon === 'exception') {
+		degraded.push('icon')
+		return 'error'
+	}
+	if (icon === 'warning') {
+		if (!isSelfDrawPlatform(platform)) {
+			degraded.push('icon')
+			return 'none'
+		}
+	}
+	return icon
+}
+
+/**
+ * 归一化 position
+ * - 自绘通道：三值全支持
+ * - 其他端：不支持，降级为 null（居中普通 toast）
+ */
+function normalizePosition(
+	position: ToastPosition | null,
+	platform: string,
+	degraded: string[]
+): ToastPosition | null {
+	if (position == null) return null
+	if (isSelfDrawPlatform(platform)) return position
+	degraded.push('position')
+	return null
+}
+
+/**
+ * 归一化 image
+ * - 自绘通道（App / Web）：支持 gif，不降级
+ * - 原生通道端：gif 不支持，降级为 null 并记录
+ * - 其他情况：透传
+ */
+function normalizeImage(
+	image: string | null,
+	platform: string,
+	degraded: string[]
+): string | null {
+	if (image == null) return null
+	if (isSelfDrawPlatform(platform)) return image
+	if (image.toLowerCase().endsWith('.gif')) {
+		degraded.push('image')
+		return null
+	}
+	return image
+}
+
+/**
+ * 主归一化入口
+ * @param options 用户传入的原始选项
+ * @returns 归一化结果（含降级参数列表）
+ */
+export function normalize(options: ToastOptions): NormalizeResult {
+	const platform = getPlatform()
+	const defaults = getToastDefaults()
+	const degraded: string[] = []
+
+	const icon: ToastIcon = normalizeIcon(
+		options.icon != null ? options.icon : defaults.icon != null ? defaults.icon : BUILTIN_ICON,
+		platform,
+		degraded
+	)
+	const position: ToastPosition | null = normalizePosition(options.position, platform, degraded)
+	const image: string | null = normalizeImage(options.image, platform, degraded)
+	const title: string = truncateTitle(options.title, platform)
+	const mask: boolean = options.mask != null ? options.mask : defaults.mask != null ? defaults.mask : BUILTIN_MASK
+	const duration: number = options.duration != null ? options.duration : defaults.duration != null ? defaults.duration : BUILTIN_DURATION
+
+	const normalized: NormalizedOptions = {
+		title: title,
+		icon: icon,
+		image: image,
+		mask: mask,
+		duration: duration,
+		position: position,
+		success: options.success,
+		fail: options.fail,
+		complete: options.complete
+	}
+
+	const result: NormalizeResult = {
+		options: normalized,
+		degraded: degraded
+	}
+	return result
+}

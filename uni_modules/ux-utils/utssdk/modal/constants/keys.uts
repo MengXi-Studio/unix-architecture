@@ -1,0 +1,6 @@
+/**
+ * modal 键名常量（错误主题）
+ */
+
+/** 失败主题，固定值，用于 ModalFail.errSubject */
+export const MODAL_ERR_SUBJECT: string = 'unix-utils:modal'

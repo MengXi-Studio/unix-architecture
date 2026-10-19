@@ -1,0 +1,17 @@
+/**
+ * toast 库内置默认值常量（仅供内部归一化回退使用）
+ *
+ * 命名红线（v0.8.1）：插件内所有 .uts 同 Kotlin package，与入口
+ * index.uts 对外常量（DEFAULT_*）同名会触发符号静默重整（__1），
+ * 故内部常量一律 BUILTIN_ 前缀，值须与入口内联字面量保持一致。
+ */
+import { ToastIcon } from '../enums'
+
+/** 内置默认展示时长（毫秒） */
+export const BUILTIN_DURATION: number = 1500
+
+/** 内置默认图标 */
+export const BUILTIN_ICON: ToastIcon = 'success'
+
+/** 内置默认是否显示透明蒙层 */
+export const BUILTIN_MASK: boolean = false

@@ -1,0 +1,93 @@
+/**
+ * App 自绘通道（App-Android / App-iOS）—— UTS 直挂系统窗口（v0.7）
+ *
+ * 通过 unix-window UTS 插件直挂系统窗口（Android WindowManager / iOS UIWindow）：
+ * - 免注册：无需 pages.json 注册承载页（v0.7 起 dialogPage 通道退役）
+ * - 触摸穿透 / 蒙层拦截 / 动画 / duration 计时由插件自管
+ * - 挂窗失败自动降级 uni.showToast 原生通道，并留痕 + fail 回调（降级可见）
+ */
+import type { NormalizedOptions, ToastFail } from '../../types'
+import type { ToastIcon, ToastPosition } from '../../enums'
+import { ERR_PLATFORM_UNSUPPORTED } from '../../enums'
+import { TOAST_ERR_SUBJECT } from '../../constants'
+import { getPlatform } from '../../utils'
+import { showNative } from '../native'
+// #ifdef APP-ANDROID
+// 注意：uts-proxy 不转发 type 导出，插件 API 为原始类型参数签名，此处不 import 类型
+import { showWindowToast, hideWindowToast } from './window-android'
+// #endif
+// #ifdef APP-IOS
+import { showWindowToast, hideWindowToast } from './window-ios'
+// #endif
+
+/**
+ * icon 字面量转通道字符串（映射与 Web 通道一致）
+ * 命名红线：与 native.uts 的同名映射函数区分（同名 top-level 符号会被静默 mangle）
+ */
+function iconToSelfDrawString(icon: ToastIcon): string {
+	if (icon == 'success') return 'success'
+	if (icon == 'error') return 'error'
+	if (icon == 'warning') return 'warning'
+	if (icon == 'loading') return 'loading'
+	return 'none'
+}
+
+/** position 字面量转通道字符串（null → bottom，与 Web 通道行为一致） */
+function positionToSelfDrawString(position: ToastPosition | null): string {
+	if (position == 'top') return 'top'
+	if (position == 'center') return 'center'
+	return 'bottom'
+}
+
+/**
+ * 降级通知：通过 fail 回调告知调用方（降级可见原则）
+ * @param options 原始选项
+ * @param param 触发降级的参数名（无则 null）
+ * @param errMsg 描述
+ */
+function notifyFallback(options: NormalizedOptions, param: string | null, errMsg: string): void {
+	if (options.fail == null) return
+	const f: ToastFail = {
+		errCode: ERR_PLATFORM_UNSUPPORTED,
+		errSubject: TOAST_ERR_SUBJECT,
+		errMsg: errMsg,
+		param: param,
+		platform: getPlatform()
+	}
+	options.fail(f)
+}
+
+/**
+ * 自绘通道展示 toast（UTS 直挂窗口，失败自动降级原生通道）
+ * @param options 归一化后的选项
+ */
+export function showSelfDraw(options: NormalizedOptions): void {
+	// #ifdef APP-ANDROID || APP-IOS
+	// image 自定义图标：直挂通道暂不渲染本地图片，降级为无图标并回调留痕
+	let iconStr = iconToSelfDrawString(options.icon)
+	if (options.image != null) {
+		iconStr = 'none'
+		notifyFallback(options, 'image', '直挂窗口通道暂不渲染 image 自定义图标，已降级')
+	}
+	showWindowToast(
+		options.title,
+		iconStr,
+		options.mask,
+		options.duration,
+		positionToSelfDrawString(options.position),
+		(errMsg: string) => {
+			// 挂窗失败：降级 uni 原生通道（与微信 / 鸿蒙同款），确保提示不丢失
+			console.log('[toast] 窗口直挂失败，降级 uni.showToast: ' + errMsg)
+			showNative(options)
+			notifyFallback(options, null, '窗口直挂失败，已降级原生通道: ' + errMsg)
+		}
+	)
+	// #endif
+}
+
+/** 自绘通道隐藏 toast */
+export function hideSelfDraw(): void {
+	// #ifdef APP-ANDROID || APP-IOS
+	hideWindowToast()
+	// #endif
+}

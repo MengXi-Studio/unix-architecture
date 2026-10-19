@@ -1,0 +1,6 @@
+/**
+ * toast 键名常量（错误主题）
+ */
+
+/** 失败主题，固定值，用于 ToastFail.errSubject */
+export const TOAST_ERR_SUBJECT: string = 'unix-utils:toast'

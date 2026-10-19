@@ -1,0 +1,82 @@
+/**
+ * modal 参数归一化（纯函数）
+ *
+ * 职责：
+ * - 填充默认值（文案 / 颜色 / showCancel / editable）
+ * - 功能层抹平：受限端按钮文案截断（Q6）、颜色校验与 alpha 剥离（Q7）
+ * - 记录发生降级的参数名，由调用侧统一回调 fail（MODAL_ERR_PLATFORM_UNSUPPORTED）
+ *
+ * 通道划分：自绘 = Web（DOM）+ App（UTS 直挂窗口）；原生 = 微信 / 鸿蒙
+ */
+import type { ModalOptions, NormalizedModalOptions, NormalizeModalResult } from '../types'
+import { BUILTIN_CONFIRM_TEXT, BUILTIN_CANCEL_TEXT, MODAL_TEXT_MAX_LENGTH } from '../constants'
+import { getModalDefaults } from '../config'
+import { getPlatform, isSelfDrawPlatform } from '../../toast/utils'
+import { normalizeModalColor } from './color'
+
+/**
+ * 截断按钮文案：受限端（微信 / 鸿蒙）超 4 字符硬截断（Q6），App / Web 不截
+ * @param text 按钮文案
+ * @param platform 当前端标识
+ * @returns 截断后的文案
+ */
+function truncateModalText(text: string, platform: string): string {
+	if (platform === 'mp-weixin' || platform === 'app-harmony') {
+		if (text.length > MODAL_TEXT_MAX_LENGTH) {
+			return text.substring(0, MODAL_TEXT_MAX_LENGTH)
+		}
+	}
+	return text
+}
+
+/**
+ * 主归一化入口
+ * @param options 用户传入的原始选项
+ * @returns 归一化结果（含降级参数列表）
+ */
+export function normalizeModal(options: ModalOptions): NormalizeModalResult {
+	const platform = getPlatform()
+	const defaults = getModalDefaults()
+	const degraded: string[] = []
+
+	const title: string = options.title != null ? options.title : ''
+	const content: string = options.content != null ? options.content : ''
+	const showCancel: boolean = options.showCancel != null ? options.showCancel : true
+	const editable: boolean = options.editable != null ? options.editable : false
+	const placeholderText: string | null = options.placeholderText != null ? options.placeholderText : null
+
+	const rawCancelText = options.cancelText != null ? options.cancelText : defaults.cancelText != null ? defaults.cancelText : BUILTIN_CANCEL_TEXT
+	const rawConfirmText = options.confirmText != null ? options.confirmText : defaults.confirmText != null ? defaults.confirmText : BUILTIN_CONFIRM_TEXT
+	const cancelText: string = truncateModalText(rawCancelText, platform)
+	const confirmText: string = truncateModalText(rawConfirmText, platform)
+
+	// 颜色：用户值 → 全局预设 → null（未传透传平台默认色，微信不干预随平台）
+	// alpha 支持按编译期通道判定：自绘通道（Web / App 自绘）保留 8 位色，
+	// 微信 / 鸿蒙原生通道剥离 alpha 并留痕（禁止运行时 uniPlatform 匹配）
+	const supportsAlpha = isSelfDrawPlatform(platform)
+	const rawCancelColor = options.cancelColor != null ? options.cancelColor : defaults.cancelColor
+	const cancelColor: string | null = normalizeModalColor(rawCancelColor, supportsAlpha, 'cancelColor', degraded)
+	const rawConfirmColor = options.confirmColor != null ? options.confirmColor : defaults.confirmColor
+	const confirmColor: string | null = normalizeModalColor(rawConfirmColor, supportsAlpha, 'confirmColor', degraded)
+
+	const normalized: NormalizedModalOptions = {
+		title: title,
+		content: content,
+		showCancel: showCancel,
+		cancelText: cancelText,
+		cancelColor: cancelColor,
+		confirmText: confirmText,
+		confirmColor: confirmColor,
+		editable: editable,
+		placeholderText: placeholderText,
+		success: options.success,
+		fail: options.fail,
+		complete: options.complete
+	}
+
+	const result: NormalizeModalResult = {
+		options: normalized,
+		degraded: degraded
+	}
+	return result
+}

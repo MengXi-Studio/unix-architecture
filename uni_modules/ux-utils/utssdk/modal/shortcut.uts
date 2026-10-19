@@ -1,0 +1,28 @@
+/**
+ * modal 语义化快捷 API：单确定按钮弹窗（alert 语义，Q4）
+ */
+import type { ModalOptions } from './types'
+import { showModalImpl } from './show-modal'
+
+/**
+ * 展示单确定按钮弹窗（showCancel: false，对齐 HTML alert 语义）
+ * @param title 标题
+ * @param content 内容（可为 null；与 title 均空时走 1001）
+ */
+export function showModalAlertImpl(title: string, content: string | null): void {
+	const options: ModalOptions = {
+		title: title,
+		content: content,
+		showCancel: false,
+		cancelText: null,
+		cancelColor: null,
+		confirmText: null,
+		confirmColor: null,
+		editable: false,
+		placeholderText: null,
+		success: null,
+		fail: null,
+		complete: null
+	}
+	showModalImpl(options)
+}

@@ -1,0 +1,31 @@
+/**
+ * modal 全局默认配置（configureModal）
+ *
+ * 模块级单例：configureModal 写入，normalizeModal 读取。
+ * 字段为 null 时由 normalizeModal 回退到内置默认文案 / 平台默认色。
+ */
+import type { ModalDefaults } from '../types'
+
+/** 当前生效的全局默认值 */
+let currentModalDefaults: ModalDefaults = {
+	cancelText: null,
+	confirmText: null,
+	cancelColor: null,
+	confirmColor: null
+}
+
+/**
+ * 设置全局默认配置
+ * @param defaults 默认值
+ */
+export function configureModalImpl(defaults: ModalDefaults): void {
+	currentModalDefaults = defaults
+}
+
+/**
+ * 获取当前全局默认配置
+ * @returns 默认值
+ */
+export function getModalDefaults(): ModalDefaults {
+	return currentModalDefaults
+}

@@ -1,0 +1,20 @@
+/**
+ * modal 类型转发层
+ *
+ * 类型的唯一定义源是 utssdk/interface.uts（官方「声明与实现」分层架构）。
+ * 本文件仅做转发，保证实现层（normalize / channels 等）继续从
+ * '../types' 引用的路径不变。
+ */
+export type {
+	ModalErrorCode,
+	ModalResult,
+	ModalFail,
+	ModalOptions,
+	NormalizedModalOptions,
+	NormalizeModalResult,
+	ModalDefaults,
+	ShowModal,
+	ShowModalAsync,
+	ShowModalAlert,
+	ConfigureModal
+} from '../../interface.uts'

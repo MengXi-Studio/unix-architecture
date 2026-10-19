@@ -1,0 +1,168 @@
+/**
+ * Web 自绘通道（#ifdef WEB 专用）
+ *
+ * Web 端 uni.showToast 是框架 DOM 实现，无原生能力加成，且
+ * position / warning / title 长度均受限；故 Web 与 App 一致走自绘通道：
+ * - DOM 单例（body 下固定定位容器），连续调用仅更新内容
+ * - position 三值全支持（top / center / bottom）
+ * - warning 图标真实渲染，title 不截断
+ * - setTimeout 精确计时，CSS opacity 过渡动画
+ *
+ * 说明：仅通过 textContent 写入用户内容，规避 XSS；
+ * 若需对齐 uni 默认视觉，可调整下方 CSS_TEXT。
+ */
+import type { NormalizedOptions } from '../types'
+import type { ToastIcon, ToastPosition } from '../enums'
+
+/** 样式节点 id */
+const TOAST_STYLE_ID = 'unix-toast-style'
+/** 容器节点 id */
+const TOAST_ROOT_ID = 'unix-toast-root'
+/** 退出动画时长（毫秒），与 CSS transition 保持一致 */
+const FADE_MS = 200
+
+/** 注入一次的全局样式 */
+const CSS_TEXT = `
+.unix-toast-root{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;justify-content:center;pointer-events:none;z-index:9999}
+.unix-toast-pos-top{align-items:flex-start;padding-top:10vh}
+.unix-toast-pos-center{align-items:center}
+.unix-toast-pos-bottom{align-items:flex-end;padding-bottom:10vh}
+.unix-toast-mask{pointer-events:auto;background:rgba(0,0,0,0.5)}
+.unix-toast-card{min-width:120px;max-width:280px;box-sizing:border-box;padding:16px;border-radius:8px;background:rgba(0,0,0,0.75);display:flex;flex-direction:column;align-items:center;opacity:0;transition:opacity 0.2s}
+.unix-toast-show{opacity:1}
+.unix-toast-icon{color:#ffffff;font-size:40px;line-height:1;margin-bottom:8px}
+.unix-toast-title{color:#ffffff;font-size:14px;text-align:center;word-break:break-all}
+.unix-toast-img{width:40px;height:40px;margin-bottom:8px;object-fit:contain}
+`
+
+/** 当前卡片节点（用于淡入淡出） */
+let cardEl: HTMLElement | null = null
+/** 自动隐藏计时器 */
+let hideTimer: number | null = null
+/** 淡入延时器 */
+let fadeInTimer: number | null = null
+
+/** 确保全局样式已注入（仅一次） */
+function ensureStyle(): void {
+	if (document.getElementById(TOAST_STYLE_ID) != null) return
+	const style = document.createElement('style')
+	style.id = TOAST_STYLE_ID
+	style.textContent = CSS_TEXT
+	document.head.appendChild(style)
+}
+
+/** 确保容器节点存在（单例复用） */
+function ensureRoot(): HTMLElement {
+	let root = document.getElementById(TOAST_ROOT_ID)
+	if (root == null) {
+		root = document.createElement('div')
+		root.id = TOAST_ROOT_ID
+		document.body.appendChild(root)
+	}
+	return root
+}
+
+/** position 映射为 CSS 类名后缀（null / 其他值归一为 bottom） */
+function resolvePosition(position: ToastPosition | null): string {
+	if (position == null) return 'bottom'
+	if (position == 'top') return 'top'
+	if (position == 'center') return 'center'
+	return 'bottom'
+}
+
+/** icon 映射为字符（none 不渲染图标） */
+function iconEmoji(icon: ToastIcon): string {
+	if (icon == 'success') return '✓'
+	if (icon == 'error' || icon == 'fail') return '✕'
+	if (icon == 'exception' || icon == 'warning') return '!'
+	if (icon == 'loading') return '◌'
+	return ''
+}
+
+/** 淡出并复位蒙层（退出动画后移除，避免遮挡点击） */
+function fadeOut(): void {
+	if (cardEl != null) {
+		cardEl.classList.remove('unix-toast-show')
+	}
+	setTimeout(() => {
+		const root = document.getElementById(TOAST_ROOT_ID)
+		if (root != null) {
+			root.className = 'unix-toast-root'
+		}
+	}, FADE_MS)
+}
+
+/**
+ * 自绘通道展示 toast
+ * @param options 归一化后的选项
+ */
+export function showSelfDraw(options: NormalizedOptions): void {
+	ensureStyle()
+	const root = ensureRoot()
+	if (hideTimer != null) {
+		clearTimeout(hideTimer)
+		hideTimer = null
+	}
+	if (fadeInTimer != null) {
+		clearTimeout(fadeInTimer)
+		fadeInTimer = null
+	}
+
+	// 位置 + 蒙层（覆盖 root 类名，蒙层随退出动画复位）
+	let cls = 'unix-toast-root unix-toast-pos-' + resolvePosition(options.position)
+	if (options.mask) {
+		cls += ' unix-toast-mask'
+	}
+	root.className = cls
+	root.innerHTML = ''
+
+	// 卡片：image 优先，其次 icon，标题始终渲染
+	const card = document.createElement('div')
+	card.className = 'unix-toast-card'
+	if (options.image != null) {
+		const img = document.createElement('img')
+		img.className = 'unix-toast-img'
+		img.src = options.image
+		card.appendChild(img)
+	} else {
+		const emoji = iconEmoji(options.icon)
+		if (emoji.length > 0) {
+			const iconEl = document.createElement('div')
+			iconEl.className = 'unix-toast-icon'
+			iconEl.textContent = emoji
+			card.appendChild(iconEl)
+		}
+	}
+	const titleEl = document.createElement('div')
+	titleEl.className = 'unix-toast-title'
+	titleEl.textContent = options.title
+	card.appendChild(titleEl)
+
+	root.appendChild(card)
+	cardEl = card
+
+	// 淡入（延后一帧触发 transition）
+	fadeInTimer = setTimeout(() => {
+		fadeInTimer = null
+		card.classList.add('unix-toast-show')
+	}, 20)
+
+	// duration 精确计时
+	hideTimer = setTimeout(() => {
+		hideTimer = null
+		fadeOut()
+	}, options.duration)
+}
+
+/** 自绘通道隐藏 toast */
+export function hideSelfDraw(): void {
+	if (hideTimer != null) {
+		clearTimeout(hideTimer)
+		hideTimer = null
+	}
+	if (fadeInTimer != null) {
+		clearTimeout(fadeInTimer)
+		fadeInTimer = null
+	}
+	fadeOut()
+}

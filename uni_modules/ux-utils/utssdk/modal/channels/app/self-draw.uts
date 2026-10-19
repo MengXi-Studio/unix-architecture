@@ -1,0 +1,54 @@
+/**
+ * modal App 自绘通道（App-Android / App-iOS）—— UTS 直挂系统窗口（v0.2.0）
+ *
+ * 通过直挂系统窗口自绘 modal（Android WindowManager 双子窗口 / iOS UIWindow）：
+ * - 免注册：无需 pages.json 注册承载页
+ * - 蒙层点击不关闭、返回键关闭（Android）、editable 光标末尾、内容超阈值滚动
+ *   由 window-android / window-ios 自管
+ * - 挂窗失败自动降级 uni.showModal 原生通道，并留痕 + fail 回调（降级可见）
+ */
+import type { NormalizedModalOptions, ModalFail } from '../../types'
+import { MODAL_ERR_PLATFORM_UNSUPPORTED } from '../../enums'
+import { MODAL_ERR_SUBJECT } from '../../constants'
+import { getPlatform } from '../../../toast/utils'
+import { showModalNative } from '../native'
+// #ifdef APP-ANDROID
+import { showWindowModal } from './window-android'
+// #endif
+// #ifdef APP-IOS
+import { showWindowModal } from './window-ios'
+// #endif
+
+/**
+ * 降级通知：通过 fail 回调告知调用方（降级可见原则）
+ * 命名红线：与 toast 通道 notifyFallback 区分（同名 top-level 符号会被静默 mangle）
+ * @param options 归一化后的选项
+ * @param param 触发降级的参数名（无则 null）
+ * @param errMsg 描述
+ */
+function notifyModalFallback(options: NormalizedModalOptions, param: string | null, errMsg: string): void {
+	if (options.fail == null) return
+	const f: ModalFail = {
+		errCode: MODAL_ERR_PLATFORM_UNSUPPORTED,
+		errSubject: MODAL_ERR_SUBJECT,
+		errMsg: errMsg,
+		param: param,
+		platform: getPlatform()
+	}
+	options.fail(f)
+}
+
+/**
+ * App 自绘通道展示 modal（UTS 直挂窗口，失败自动降级原生通道）
+ * @param options 归一化后的选项
+ */
+export function showModalAppSelfDraw(options: NormalizedModalOptions): void {
+	// #ifdef APP-ANDROID || APP-IOS
+	showWindowModal(options, (errMsg: string) => {
+		// 挂窗失败：降级 uni 原生通道（与微信 / 鸿蒙同款），确保弹窗不丢失
+		console.log('[modal] 窗口直挂失败，降级 uni.showModal: ' + errMsg)
+		showModalNative(options)
+		notifyModalFallback(options, null, '窗口直挂失败，已降级原生通道: ' + errMsg)
+	})
+	// #endif
+}

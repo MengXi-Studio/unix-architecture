@@ -1,0 +1,64 @@
+/**
+ * uni 原生通道（App / 微信 / 鸿蒙，Q1 锁定 A：uni.showModal 直调 + 库内归一化）
+ *
+ * 直接调用 uni.showModal，并将原生结果归一化为 ModalResult：
+ * - confirm / cancel 恒双返回互斥（设计文档 1.2⑦ 抹平）
+ * - content 仅 editable 且确认时返回（非 editable 平台回 undefined → 归一 null）
+ *
+ * 类型注意：success 回调参数标注官方 ShowModalSuccess（可选字段 content
+ * 读取为 string | null，判空后使用）；fail 用 ShowModalFail。
+ */
+import type { NormalizedModalOptions, ModalResult, ModalFail } from '../types'
+import { MODAL_ERR_PARAM_INVALID } from '../enums'
+import { MODAL_ERR_SUBJECT } from '../constants'
+import { getPlatform } from '../../toast/utils'
+
+/**
+ * 通过 uni 原生通道展示模态弹窗
+ * @param options 归一化后的选项
+ */
+export function showModalNative(options: NormalizedModalOptions): void {
+	const platform = getPlatform()
+	uni.showModal({
+		title: options.title,
+		content: options.content,
+		showCancel: options.showCancel,
+		cancelText: options.cancelText,
+		cancelColor: options.cancelColor,
+		confirmText: options.confirmText,
+		confirmColor: options.confirmColor,
+		editable: options.editable,
+		placeholderText: options.placeholderText,
+		success: (res: ShowModalSuccess) => {
+			if (options.success == null) return
+			// 返回值归一化：confirm / cancel 恒双返回互斥
+			const confirm = res.confirm == true
+			let content: string | null = null
+			if (options.editable && confirm) {
+				const raw = res.content
+				content = raw != null ? raw : ''
+			}
+			const r: ModalResult = {
+				confirm: confirm,
+				cancel: !confirm,
+				content: content
+			}
+			options.success(r)
+		},
+		fail: (err: ShowModalFail) => {
+			if (options.fail != null) {
+				const f: ModalFail = {
+					errCode: MODAL_ERR_PARAM_INVALID,
+					errSubject: MODAL_ERR_SUBJECT,
+					errMsg: err.errMsg,
+					param: null,
+					platform: platform
+				}
+				options.fail(f)
+			}
+		},
+		complete: (res: any) => {
+			if (options.complete != null) options.complete(res)
+		}
+	})
+}

@@ -1,0 +1,109 @@
+/**
+ * toast 主流程：归一化 → 通道分发 → 回调
+ *
+ * 通道分发（v0.7）：
+ * - App-Android / App-iOS：UTS 直挂系统窗口通道（unix-window 插件，免注册）
+ * - Web：自绘通道（DOM 单例）
+ * - 其他端（微信 / 鸿蒙）：uni 原生通道
+ */
+import type { ToastOptions, ToastFail, ToastResult, NormalizedOptions } from './types'
+import { ERR_PLATFORM_UNSUPPORTED } from './enums'
+import { TOAST_ERR_SUBJECT } from './constants'
+import { normalize, getPlatform } from './utils'
+import { showNative, hideNative } from './channels/native'
+// #ifdef APP-ANDROID || APP-IOS
+import { showSelfDraw, hideSelfDraw } from './channels/app/self-draw'
+// #endif
+// #ifdef WEB
+import { showSelfDraw, hideSelfDraw } from './channels/web'
+// #endif
+
+/**
+ * 将降级参数逐一通过 fail 回调通知调用方
+ * @param options 原始用户选项
+ * @param degraded 发生降级的参数名列表
+ */
+function notifyDegraded(options: ToastOptions, degraded: string[]): void {
+	if (degraded.length === 0 || options.fail == null) return
+	const platform = getPlatform()
+	for (let i = 0; i < degraded.length; i++) {
+		const f: ToastFail = {
+			errCode: ERR_PLATFORM_UNSUPPORTED,
+			errSubject: TOAST_ERR_SUBJECT,
+			errMsg: '参数在当前端不支持，已降级处理',
+			param: degraded[i],
+			platform: platform
+		}
+		options.fail(f)
+	}
+}
+
+/**
+ * 按端分发到对应通道展示
+ * @param options 归一化后的选项
+ */
+function dispatchShow(options: NormalizedOptions): void {
+	// #ifdef APP-ANDROID || APP-IOS || WEB
+	showSelfDraw(options)
+	// #else
+	showNative(options)
+	// #endif
+}
+
+/**
+ * 展示 toast（回调式，与 uni.showToast 同构，迁移零成本）
+ * @param options 选项
+ */
+export function showToastImpl(options: ToastOptions): void {
+	const result = normalize(options)
+	notifyDegraded(options, result.degraded)
+	dispatchShow(result.options)
+}
+
+/** 隐藏 toast */
+export function hideToastImpl(): void {
+	// #ifdef APP-ANDROID || APP-IOS || WEB
+	hideSelfDraw()
+	// #else
+	hideNative()
+	// #endif
+}
+
+/**
+ * Promise 式展示 toast（成功 resolve，失败 reject ToastFail 结构的 JSON 字符串）
+ *
+ * 失败契约与 showModalAsync 统一：App端运行时 async 代理仅将 reject 值按
+ * 字符串透传（类型化对象字段全部丢失），故库内统一 JSON.stringify 后
+ * reject，业务侧 JSON.parse<ToastFail>(err as string) 还原。
+ * @param options 选项
+ * @returns Promise
+ */
+export function showToastAsyncImpl(options: ToastOptions): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		const wrapped: ToastOptions = {
+			title: options.title,
+			icon: options.icon,
+			image: options.image,
+			mask: options.mask,
+			duration: options.duration,
+			position: options.position,
+			success: (res: ToastResult) => {
+				if (options.success != null) options.success(res)
+				resolve()
+			},
+			fail: (err: ToastFail) => {
+				if (options.fail != null) options.fail(err)
+				const j: UTSJSONObject = {
+					errCode: err.errCode,
+					errSubject: err.errSubject,
+					errMsg: err.errMsg,
+					param: err.param,
+					platform: err.platform
+				}
+				reject(JSON.stringify(j))
+			},
+			complete: options.complete
+		}
+		showToastImpl(wrapped)
+	})
+}

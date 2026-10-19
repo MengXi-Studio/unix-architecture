@@ -1,0 +1,71 @@
+/**
+ * modal 16 进制颜色校验与归一化
+ *
+ * 规则（Q7）：接受 #RGB / #RRGGBB / #RRGGBBAA；
+ * - #RGB 展开为 #RRGGBB（三端原生通道 6 位色值实测生效）
+ * - #RRGGBBAA：自绘通道（Web / App 自绘）保留 alpha 全生效；
+ *   微信 / 鸿蒙原生通道剥离 alpha 并留痕
+ *   （M0 实测：8 位色与命名色平台静默回退默认色，不报错）
+ * - 非法值（命名色 / 缺 # / 越界）归一为 null（等效未传，回退平台默认色）并留痕
+ */
+
+/**
+ * 判断单字符是否为 16 进制数字
+ * @param c 单个字符
+ * @returns 是否 0-9 / a-f / A-F
+ */
+function isModalHexChar(c: string): boolean {
+	const code = c.charCodeAt(0)
+	if (code == null) return false
+	if (code >= 48 && code <= 57) return true // 0-9
+	if (code >= 65 && code <= 70) return true // A-F
+	if (code >= 97 && code <= 102) return true // a-f
+	return false
+}
+
+/**
+ * 归一化颜色值
+ * @param value 用户传入的颜色值（null 表示未传）
+ * @param supportsAlpha 当前端是否支持 8 位 alpha 色（Web 自绘通道）
+ * @param param 参数名（降级留痕用，如 'confirmColor'）
+ * @param degraded 降级参数名收集列表
+ * @returns 归一化后的颜色值；null 表示透传平台默认色
+ */
+export function normalizeModalColor(
+	value: string | null,
+	supportsAlpha: boolean,
+	param: string,
+	degraded: string[]
+): string | null {
+	if (value == null) return null
+	if (!value.startsWith('#')) {
+		degraded.push(param)
+		return null
+	}
+	const hex = value.substring(1)
+	const len = hex.length
+	if (len != 3 && len != 6 && len != 8) {
+		degraded.push(param)
+		return null
+	}
+	for (let i = 0; i < len; i++) {
+		if (!isModalHexChar(hex.charAt(i))) {
+			degraded.push(param)
+			return null
+		}
+	}
+	if (len == 3) {
+		// #RGB 展开 #RRGGBB
+		const r = hex.charAt(0)
+		const g = hex.charAt(1)
+		const b = hex.charAt(2)
+		return '#' + r + r + g + g + b + b
+	}
+	if (len == 8) {
+		if (supportsAlpha) return value
+		// 原生通道不支持 alpha：剥离 alpha 并留痕
+		degraded.push(param)
+		return '#' + hex.substring(0, 6)
+	}
+	return value
+}

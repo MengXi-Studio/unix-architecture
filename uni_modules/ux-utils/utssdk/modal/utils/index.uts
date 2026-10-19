@@ -1,0 +1,5 @@
+/**
+ * modal 工具桶文件
+ */
+export { normalizeModalColor } from './color'
+export { normalizeModal } from './normalize'

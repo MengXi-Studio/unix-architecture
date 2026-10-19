@@ -1,0 +1,9 @@
+/**
+ * toast 限制策略常量
+ */
+
+/** 微信小程序 icon=success/loading 时 title 最大汉字数 */
+export const WECHAT_TITLE_MAX_LENGTH: number = 7
+
+/** 原生通道端（鸿蒙等非微信、非自绘）title 最大字符数，超出加省略号 */
+export const NATIVE_TITLE_MAX_LENGTH: number = 20

@@ -1,0 +1,6 @@
+/**
+ * modal 常量桶文件
+ */
+export { BUILTIN_CONFIRM_TEXT, BUILTIN_CANCEL_TEXT, BUILTIN_CONFIRM_COLOR, BUILTIN_CANCEL_COLOR, BUILTIN_MAX_CONTENT_HEIGHT_PERCENT } from './defaults'
+export { MODAL_TEXT_MAX_LENGTH } from './limits'
+export { MODAL_ERR_SUBJECT } from './keys'

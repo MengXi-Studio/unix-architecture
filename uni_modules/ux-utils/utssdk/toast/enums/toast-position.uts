@@ -1,0 +1,9 @@
+/**
+ * toast 位置字面量类型
+ *
+ * v0.8 起由 UTS enum 改为字符串字面量联合类型（UTS enum 无法跨
+ * uts-proxy 代理边界导出，实测见 utssdk.js 代理产物）。
+ */
+
+/** toast 位置 */
+export type ToastPosition = 'top' | 'center' | 'bottom'

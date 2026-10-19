@@ -1,0 +1,6 @@
+/**
+ * modal 限制策略常量
+ */
+
+/** 受限端（微信 / 鸿蒙原生通道）按钮文案最大字符数（Q6：库内主动截断） */
+export const MODAL_TEXT_MAX_LENGTH: number = 4

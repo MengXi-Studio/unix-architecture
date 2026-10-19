@@ -1,0 +1,342 @@
+/**
+ * unix-window / App-Android 实现
+ *
+ * 免注册直挂系统窗口（v0.7 toast 通道，showModal 等后续窗口级模块复用）：
+ * - UTSAndroid.getUniActivity() + WindowManager.addView 挂应用子窗口
+ *   （TYPE_APPLICATION_PANEL，无需悬浮窗权限；真机验证通过 2026-10-03 Mi 10 Pro）
+ * - mask = false：单窗口（卡片），FLAG_NOT_TOUCHABLE 触摸穿透
+ * - mask = true：双窗口——全屏蒙层窗口（拦截触摸）+ 卡片窗口（位于蒙层之上，
+ *   与 mask=false 使用完全相同的 gravity/y 定位代码，保证两档位置语义一致）
+ * - 生命周期自管：渐显渐隐动画、duration 计时、到期 / 主动 removeView
+ *
+ * 类型转换注意（UTS 编译约束）：
+ * - number → Float 用 .toFloat()，number → Int 用 .toInt()（官方 number API）
+ * - 平台 Float / Int 参与运算前用 Number.from() 归一为 UTS number
+ * - API 采用原始类型参数：uts-proxy 不转发 type 导出，对象类型无法跨代理边界引用
+ *
+ * 注意：本文件位于共享 channels 目录（非 utssdk/app-android 平台目录），
+ * android.* 平台 API 依赖整体条件编译包裹，其他平台编译时整体裁剪。
+ */
+// #ifdef APP-ANDROID
+import Activity from 'android.app.Activity'
+import IBinder from 'android.os.IBinder'
+import Context from 'android.content.Context'
+import WindowManager from 'android.view.WindowManager'
+import View from 'android.view.View'
+import Gravity from 'android.view.Gravity'
+import PixelFormat from 'android.graphics.PixelFormat'
+import Color from 'android.graphics.Color'
+import TextView from 'android.widget.TextView'
+import LinearLayout from 'android.widget.LinearLayout'
+import FrameLayout from 'android.widget.FrameLayout'
+import GradientDrawable from 'android.graphics.drawable.GradientDrawable'
+import TypedValue from 'android.util.TypedValue'
+
+/** 当前挂载的卡片视图（位置由卡片窗口的 gravity / y 唯一决定） */
+let toastRoot: View | null = null
+/** 当前挂载的蒙层视图（仅 mask = true 时非空；蒙层与卡片为两个独立子窗口） */
+let maskRoot: View | null = null
+/** 卡片内图标视图（复用时更新；icon 为 none 时为 null） */
+let iconText: TextView | null = null
+/** 卡片内标题视图 */
+let titleText: TextView | null = null
+/** 复用判定：上次挂载是否带蒙层 */
+let lastMask: boolean = false
+/** 复用判定：上次挂载的位置档位（变化需整体重建，gravity/y 无法在复用路径修改） */
+let lastPosition: string = ''
+/** 自动隐藏计时器 id */
+let hideTimer: number = 0
+
+/** icon 标识映射为 emoji 字符（与 Web 通道映射保持一致） */
+function iconEmoji(icon: string): string {
+	if (icon == 'success') return '✓'
+	if (icon == 'error') return '✕'
+	if (icon == 'warning' || icon == 'exception') return '!'
+	if (icon == 'loading') return '◌'
+	return ''
+}
+
+/** position 标识映射为窗口 gravity */
+function positionGravity(position: string): Int {
+	if (position == 'top') return Gravity.TOP | Gravity.CENTER_HORIZONTAL
+	if (position == 'center') return Gravity.CENTER
+	return Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL
+}
+
+/** 屏高的 10%（top / bottom 档位的纵向偏移，与 Web 通道 10vh 一致） */
+function screenEdgeOffset(activity: Activity): Int {
+	const h = Number.from(activity.getResources().getDisplayMetrics().heightPixels)
+	return (h * 0.1).toInt()
+}
+
+/** dp → px（Int，用于 padding / margin / maxWidth 等整型参数） */
+function dp2pxI(activity: Activity, dp: number): Int {
+	const density = Number.from(activity.getResources().getDisplayMetrics().density)
+	return (dp * density).toInt()
+}
+
+/** dp → px（Float，用于 setCornerRadius 等浮点参数） */
+function dp2pxF(activity: Activity, dp: number): Float {
+	const density = Number.from(activity.getResources().getDisplayMetrics().density)
+	return (dp * density).toFloat()
+}
+
+/** 构建 Toast 卡片：深色圆角 LinearLayout，内含图标 + 标题（视觉对齐 Web 通道） */
+function buildCard(activity: Activity, title: string, icon: string): LinearLayout {
+	const card = new LinearLayout(activity)
+	card.setOrientation(LinearLayout.VERTICAL)
+	card.setGravity(Gravity.CENTER)
+	const bg = new GradientDrawable()
+	bg.setColor(Color.parseColor('#BF000000'))
+	bg.setCornerRadius(dp2pxF(activity, 8.0))
+	card.setBackground(bg)
+	const pad = dp2pxI(activity, 16.0)
+	card.setPadding(pad, pad, pad, pad)
+	card.setMinimumWidth(dp2pxI(activity, 120.0))
+	// 图标：icon 为 none 时不渲染
+	const emoji = iconEmoji(icon)
+	if (emoji.length > 0) {
+		const iv = new TextView(activity)
+		iv.setTextColor(Color.WHITE)
+		iv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 40.0.toFloat())
+		iv.setGravity(Gravity.CENTER)
+		iv.setText(emoji)
+		iv.setPadding(0, 0, 0, dp2pxI(activity, 8.0))
+		card.addView(iv)
+		iconText = iv
+	} else {
+		iconText = null
+	}
+	// 标题：多行居中，限宽 240dp
+	const tv = new TextView(activity)
+	tv.setTextColor(Color.WHITE)
+	tv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0.toFloat())
+	tv.setGravity(Gravity.CENTER)
+	tv.setMaxWidth(dp2pxI(activity, 240.0))
+	tv.setText(title)
+	card.addView(tv)
+	titleText = tv
+	return card
+}
+
+/** 构建全屏蒙层视图（拦截触摸；视觉 rgba(0,0,0,0.5) 对齐 Web 通道） */
+function buildMask(activity: Activity): FrameLayout {
+	const root = new FrameLayout(activity)
+	const dim = new GradientDrawable()
+	dim.setColor(Color.parseColor('#80000000'))
+	root.setBackground(dim)
+	return root
+}
+
+/** 复用模式下更新卡片文案（图标存在性不变时才走此路径） */
+function updateTexts(icon: string, title: string): void {
+	const emoji = iconEmoji(icon)
+	const it = iconText
+	if (it != null) {
+		it.setVisibility(emoji.length > 0 ? View.VISIBLE : View.GONE)
+		it.setText(emoji)
+	}
+	const tt = titleText
+	if (tt != null) {
+		tt.setText(title)
+	}
+}
+
+/** 立即移除指定窗口视图（重建时使用，无动画） */
+function removeRootImmediate(view: View): void {
+	const act = UTSAndroid.getUniActivity()
+	if (act == null) {
+		return
+	}
+	const activity = act as Activity
+	activity.runOnUiThread(() => {
+		try {
+			const wm = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+			wm.removeView(view)
+		} catch (e) {
+			// 视图可能已被移除，忽略
+		}
+	})
+}
+
+/** 重置自动隐藏计时器 */
+function scheduleHide(duration: number): void {
+	if (hideTimer != 0) {
+		clearTimeout(hideTimer)
+	}
+	hideTimer = setTimeout(() => {
+		hideTimer = 0
+		hideWindowToast()
+	}, duration)
+}
+
+/**
+ * 构建卡片窗口的布局参数（位置唯一来源，mask 两档共用，保证语义一致）
+ * - gravity + y：top 距顶 10%（y 向下偏移）、bottom 距底 10%、center 居中
+ * - 触摸穿透：卡片永远不吃触摸（mask = true 时由蒙层窗口负责拦截）
+ */
+function buildCardParams(activity: Activity, position: string, token: IBinder): WindowManager.LayoutParams {
+	const params = new WindowManager.LayoutParams()
+	// 挂在 Activity 窗口之下的应用子窗口：无需悬浮窗权限
+	params.type = WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
+	params.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+		| WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+		| WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+	params.format = PixelFormat.TRANSLUCENT
+	params.width = WindowManager.LayoutParams.WRAP_CONTENT
+	params.height = WindowManager.LayoutParams.WRAP_CONTENT
+	params.gravity = positionGravity(position)
+	// y 偏移方向随 gravity 变化（Gravity.apply）：
+	// TOP gravity：top = 容器顶 + y，正值向下；BOTTOM gravity：bottom = 容器底 - y，正值向上（向内）
+	// 实测（Mi 10 Pro dumpsys 取证）：bottom 传负值会把底边推到超屏方向，被系统 clamp 后贴底显示
+	if (position == 'top') {
+		params.y = screenEdgeOffset(activity)
+	}
+	if (position == 'bottom') {
+		// 正值 → 卡片底边距显示区底 10% 屏高，与 Web bottom:10vh / iOS 底边锚定语义一致
+		params.y = screenEdgeOffset(activity)
+	}
+	params.token = token
+	return params
+}
+
+/**
+ * 直挂窗口展示 Toast（主线程挂窗，duration 到期自动隐藏）
+ * @param title 提示内容
+ * @param icon 图标标识（success / error / warning / loading / none，已由库内归一化）
+ * @param mask 是否显示蒙层（true 时蒙层窗口拦截触摸，false 时触摸穿透）
+ * @param duration 展示时长（毫秒），插件内部计时到期自动隐藏
+ * @param position 位置（top / center / bottom）
+ * @param fail 失败回调（activity 缺失 / token 未就绪 / 挂窗异常时触发）
+ */
+export function showWindowToast(title: string, icon: string, mask: boolean, duration: number, position: string, fail: ((errMsg: string) => void) | null): void {
+	const act = UTSAndroid.getUniActivity()
+	if (act == null) {
+		if (fail != null) fail('getUniActivity() 为 null，无法挂窗')
+		return
+	}
+	const activity = act as Activity
+	activity.runOnUiThread(() => {
+		try {
+			const existing = toastRoot
+			const maskChanged = lastMask != mask
+			// 位置档位变化时 gravity / y 无法在复用路径修改，需整体重建
+			const positionChanged = lastPosition != position
+			// 图标从"无"变"有"时无法靠更新路径补建视图，需整体重建
+			const needRebuildForIcon = iconText == null && iconEmoji(icon).length > 0
+			if (existing != null && !maskChanged && !positionChanged && !needRebuildForIcon) {
+				console.log('[unix-window] 复用已有窗口视图，更新文案 position=' + position)
+				updateTexts(icon, title)
+				scheduleHide(duration)
+				return
+			}
+			// 蒙层 / 位置 / 图标缺失变化：先立即移除旧卡片与旧蒙层
+			if (existing != null) {
+				removeRootImmediate(existing)
+				toastRoot = null
+			}
+			const oldMask = maskRoot
+			if (oldMask != null) {
+				removeRootImmediate(oldMask)
+				maskRoot = null
+			}
+			// 子窗口必须绑定 Activity 窗口 token，页面就绪后才有效
+			const token = activity.getWindow().getDecorView().getWindowToken()
+			if (token == null) {
+				if (fail != null) fail('windowToken 为 null（页面未就绪），无法挂窗')
+				return
+			}
+			const wm = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+			// 蒙层窗口（仅 mask = true）：全屏拦截触摸，先挂（位于卡片之下）
+			if (mask) {
+				const maskParams = new WindowManager.LayoutParams()
+				maskParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
+				// 不加 FLAG_NOT_TOUCHABLE：蒙层吃掉全部触摸，实现拦截语义
+				maskParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+					| WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+				maskParams.format = PixelFormat.TRANSLUCENT
+				maskParams.width = WindowManager.LayoutParams.MATCH_PARENT
+				maskParams.height = WindowManager.LayoutParams.MATCH_PARENT
+				maskParams.token = token
+				const maskView = buildMask(activity)
+				wm.addView(maskView, maskParams)
+				maskRoot = maskView
+			}
+			// 卡片窗口：后挂（位于蒙层之上），布局参数与 mask = false 完全一致
+			const cardParams = buildCardParams(activity, position, token)
+			const card = buildCard(activity, title, icon)
+			wm.addView(card, cardParams)
+			toastRoot = card
+			lastMask = mask
+			lastPosition = position
+			console.log('[unix-window] addView 成功 mask=' + mask + ' position=' + position + ' gravity=' + cardParams.gravity + ' y=' + cardParams.y)
+			// 进入动画：卡片（与蒙层）透明度渐显
+			card.setAlpha(0.0.toFloat())
+			card.animate().alpha(1.0.toFloat()).setDuration(200).start()
+			if (maskRoot != null) {
+				maskRoot!.setAlpha(0.0.toFloat())
+				maskRoot!.animate().alpha(1.0.toFloat()).setDuration(200).start()
+			}
+			scheduleHide(duration)
+		} catch (e) {
+			if (fail != null) fail('挂窗异常: ' + e.message)
+		}
+	})
+}
+
+/**
+ * 隐藏直挂窗口 Toast（渐隐后移除卡片与蒙层）
+ */
+export function hideWindowToast(): void {
+	if (hideTimer != 0) {
+		clearTimeout(hideTimer)
+		hideTimer = 0
+	}
+	const root = toastRoot
+	const mask = maskRoot
+	if (root == null && mask == null) {
+		return
+	}
+	const act = UTSAndroid.getUniActivity()
+	if (act == null) {
+		return
+	}
+	const activity = act as Activity
+	// 引用先置空，避免连续调用 / 复用判定异常；闭包持有本次视图完成动画后移除
+	toastRoot = null
+	maskRoot = null
+	iconText = null
+	titleText = null
+	activity.runOnUiThread(() => {
+		try {
+			// 退出动画：卡片（与蒙层）透明度渐隐
+			if (root != null) {
+				root.animate().alpha(0.0.toFloat()).setDuration(200).start()
+			}
+			if (mask != null) {
+				mask.animate().alpha(0.0.toFloat()).setDuration(200).start()
+			}
+			// 等退出动画结束后移除，避免动画被截断
+			setTimeout(() => {
+				const wm = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+				if (root != null) {
+					try {
+						wm.removeView(root)
+					} catch (e) {
+						// 视图可能已被移除，忽略
+					}
+				}
+				if (mask != null) {
+					try {
+						wm.removeView(mask)
+					} catch (e) {
+						// 视图可能已被移除，忽略
+					}
+				}
+			}, 220)
+		} catch (e) {
+			// 忽略隐藏异常
+		}
+	})
+}
+// #endif

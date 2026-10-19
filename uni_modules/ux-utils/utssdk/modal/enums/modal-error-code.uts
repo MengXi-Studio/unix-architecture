@@ -1,0 +1,19 @@
+/**
+ * modal 失败码
+ *
+ * 对齐官方 UTS 插件错误码模式（数字字面量联合类型）：
+ * 官方模板 export type MyApiErrorCode = 9010001 | 9010002。
+ *
+ * 命名红线：内部常量用 MODAL_ERR_ 前缀，与 toast 内部常量（ERR_*）及
+ * 入口对外常量全局唯一（插件全部 .uts 合并同一 Kotlin package，
+ * 同名 top-level 符号会触发静默重整）。
+ */
+
+/** modal 失败码 */
+export type ModalErrorCode = 1001 | 2001
+
+/** 参数非法（title / content 均空；uni 原生通道调用失败） */
+export const MODAL_ERR_PARAM_INVALID: ModalErrorCode = 1001
+
+/** 参数当前端不支持且已降级（如 8 位色值在原生通道剥离 alpha）；info 级，不阻断展示 */
+export const MODAL_ERR_PLATFORM_UNSUPPORTED: ModalErrorCode = 2001

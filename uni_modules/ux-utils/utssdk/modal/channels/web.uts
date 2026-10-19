@@ -1,0 +1,154 @@
+/**
+ * Web 自绘通道（#ifdef WEB 专用，Q2 确认 DOM 自绘）
+ *
+ * Web 端走 DOM 单例自绘，与 toast 自绘架构对齐：
+ * - 蒙层 + 居中卡片 + 按钮行 + input（editable）
+ * - 蒙层点击不关闭（统一交互，矩阵标注）
+ * - 内容超过内置阈值（屏高 60%）才限高滚动，短内容无滚动条
+ * - editable 语义对齐微信官方：content 作为输入框初始值，光标定位末尾
+ * - 颜色 / 文案 / editable 全生效，未传颜色取库内置默认；#RRGGBBAA 保留 alpha
+ * - 仅通过 textContent / 属性写入用户内容，规避 XSS
+ */
+import type { NormalizedModalOptions, ModalResult } from '../types'
+import { BUILTIN_CONFIRM_COLOR, BUILTIN_CANCEL_COLOR, BUILTIN_MAX_CONTENT_HEIGHT_PERCENT } from '../constants'
+
+/** 样式节点 id */
+const MODAL_STYLE_ID = 'unix-modal-style'
+/** 容器节点 id */
+const MODAL_ROOT_ID = 'unix-modal-root'
+
+/** 注入一次的全局样式 */
+const MODAL_CSS_TEXT = `
+.unix-modal-root{position:fixed;left:0;top:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5);z-index:9999}
+.unix-modal-card{width:280px;max-width:85%;box-sizing:border-box;background:#ffffff;border-radius:12px;padding:24px 20px 16px;display:flex;flex-direction:column}
+.unix-modal-title{color:#111111;font-size:17px;font-weight:bold;text-align:center;line-height:1.4;word-break:break-all}
+.unix-modal-content{color:#666666;font-size:14px;text-align:center;line-height:1.5;margin-top:8px;word-break:break-all}
+.unix-modal-input{margin-top:12px;box-sizing:border-box;width:100%;height:36px;border:1px solid #dddddd;border-radius:4px;padding:0 8px;font-size:14px;color:#333333;outline:none}
+.unix-modal-btns{display:flex;flex-direction:row;margin-top:20px}
+.unix-modal-btn{flex:1;height:40px;background:transparent;border:none;font-size:16px;cursor:pointer;padding:0}
+`
+
+/** 确保全局样式已注入（仅一次） */
+function ensureModalStyle(): void {
+	if (document.getElementById(MODAL_STYLE_ID) != null) return
+	const style = document.createElement('style')
+	style.id = MODAL_STYLE_ID
+	style.textContent = MODAL_CSS_TEXT
+	document.head.appendChild(style)
+}
+
+/** 确保容器节点存在（单例复用，默认隐藏） */
+function ensureModalRoot(): HTMLElement {
+	let root = document.getElementById(MODAL_ROOT_ID)
+	if (root == null) {
+		root = document.createElement('div')
+		root.id = MODAL_ROOT_ID
+		root.style.display = 'none'
+		document.body.appendChild(root)
+	}
+	return root
+}
+
+/**
+ * 关闭并清空弹窗
+ * @param root 容器节点
+ */
+function closeSelfDrawModal(root: HTMLElement): void {
+	root.style.display = 'none'
+	root.innerHTML = ''
+}
+
+/**
+ * 自绘通道展示模态弹窗
+ * @param options 归一化后的选项
+ */
+export function showModalSelfDraw(options: NormalizedModalOptions): void {
+	ensureModalStyle()
+	const root = ensureModalRoot()
+	root.innerHTML = ''
+	root.style.display = 'flex'
+
+	// 卡片：标题 / 内容（1001 空参校验保证至少其一非空）
+	const card = document.createElement('div')
+	card.className = 'unix-modal-card'
+	if (options.title.length > 0) {
+		const titleEl = document.createElement('div')
+		titleEl.className = 'unix-modal-title'
+		titleEl.textContent = options.title
+		card.appendChild(titleEl)
+	}
+	// editable 时 content 作为输入框初始值（微信官方语义），不渲染正文
+	if (!options.editable && options.content.length > 0) {
+		const contentEl = document.createElement('div')
+		contentEl.className = 'unix-modal-content'
+		contentEl.textContent = options.content
+		// 内置阈值：超过屏高 60% 才限高滚动，短内容无滚动条（与 App 自绘通道一致）
+		contentEl.style.maxHeight = BUILTIN_MAX_CONTENT_HEIGHT_PERCENT.toString() + 'vh'
+		contentEl.style.overflowY = 'auto'
+		card.appendChild(contentEl)
+	}
+
+	// 输入框（editable）：content 作为初始值
+	let inputEl: HTMLInputElement | null = null
+	if (options.editable) {
+		inputEl = document.createElement('input')
+		inputEl.className = 'unix-modal-input'
+		inputEl.value = options.content
+		if (options.placeholderText != null) {
+			inputEl.placeholder = options.placeholderText
+		}
+		card.appendChild(inputEl)
+	}
+
+	// 按钮行（颜色 null 时取库内置默认）
+	const btns = document.createElement('div')
+	btns.className = 'unix-modal-btns'
+	const confirmColor = options.confirmColor != null ? options.confirmColor : BUILTIN_CONFIRM_COLOR
+	const cancelColor = options.cancelColor != null ? options.cancelColor : BUILTIN_CANCEL_COLOR
+
+	if (options.showCancel) {
+		const cancelBtn = document.createElement('button')
+		cancelBtn.className = 'unix-modal-btn'
+		cancelBtn.textContent = options.cancelText
+		cancelBtn.style.color = cancelColor
+		cancelBtn.onclick = () => {
+			closeSelfDrawModal(root)
+			if (options.success != null) {
+				const r: ModalResult = { confirm: false, cancel: true, content: null }
+				options.success(r)
+				if (options.complete != null) options.complete(r)
+			}
+		}
+		btns.appendChild(cancelBtn)
+	}
+
+	const confirmBtn = document.createElement('button')
+	confirmBtn.className = 'unix-modal-btn'
+	confirmBtn.textContent = options.confirmText
+	confirmBtn.style.color = confirmColor
+	confirmBtn.onclick = () => {
+		// 先取值再关闭（closeSelfDrawModal 会清空 DOM）
+		const value = inputEl != null ? inputEl.value : ''
+		closeSelfDrawModal(root)
+		if (options.success != null) {
+			const r: ModalResult = {
+				confirm: true,
+				cancel: false,
+				content: options.editable ? value : null
+			}
+			options.success(r)
+			if (options.complete != null) options.complete(r)
+		}
+	}
+	btns.appendChild(confirmBtn)
+
+	card.appendChild(btns)
+	root.appendChild(card)
+
+	// editable：聚焦并把光标定位到输入内容末尾
+	if (inputEl != null) {
+		const len = options.content.length
+		inputEl.focus()
+		inputEl.setSelectionRange(len, len)
+	}
+}

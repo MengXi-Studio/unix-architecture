@@ -1,18 +1,19 @@
 <template>
-	<view class="page">
-		<view class="logo-box">
-			<AppLogo />
-		</view>
-		<text class="title">{{ title }}</text>
-		<text class="welcome" v-if="name.length > 0">欢迎，{{ name }}</text>
-		<button class="logout-btn" @click="handleLogout">退出登录</button>
-	</view>
+  <view class="page">
+    <view class="logo-box">
+      <AppLogo />
+    </view>
+    <text class="title">{{ title }}</text>
+    <text class="welcome" v-if="name.length > 0">欢迎，{{ name }}</text>
+    <button class="logout-btn" @click="handleLogout">退出登录</button>
+  </view>
 </template>
 
 <script setup lang="uts">
 import { useRouter } from '@/uni_modules/ux-router/utssdk/index.uts'
 import { storeToRefs } from '@/uni_modules/ux-pinia'
 import { useUserStore } from '@/stores/index.uts'
+import { showModalAsync } from '@/uni_modules/ux-utils'
 
 const userStore = useUserStore()
 const { name } = storeToRefs(userStore)
@@ -20,39 +21,53 @@ const router = useRouter()
 const title = ref('Hello')
 
 const handleLogout = (): void => {
-	userStore.logoutAction().then(() => {
-		router.relaunch('/pages/login/login')
-	}).catch((_e) => {
-		console.error('[index] logout 异常')
-	})
+  showModalAsync({
+    title: '退出登录',
+    content: '确定要退出当前账号吗？'
+  })
+    .then(res => {
+      if (res.confirm) {
+        userStore
+          .logoutAction()
+          .then(() => {
+            router.relaunch('/pages/login/login')
+          })
+          .catch(_e => {
+            console.error('[index] logout 异常')
+          })
+      }
+    })
+    .catch(_e => {
+      console.error('[index] modal 异常')
+    })
 }
 </script>
 
 <style>
-	.page {
-		flex: 1;
-	}
+.page {
+  flex: 1;
+}
 
-	.logo-box {
-		align-items: center;
-		margin-top: 100px;
-		margin-bottom: 25px;
-	}
+.logo-box {
+  align-items: center;
+  margin-top: 100px;
+  margin-bottom: 25px;
+}
 
-	.title {
-		font-size: 18px;
-		color: #8f8f94;
-		text-align: center;
-	}
+.title {
+  font-size: 18px;
+  color: #8f8f94;
+  text-align: center;
+}
 
-	.welcome {
-		font-size: 14px;
-		color: #303133;
-		text-align: center;
-		margin-top: 12px;
-	}
+.welcome {
+  font-size: 14px;
+  color: #303133;
+  text-align: center;
+  margin-top: 12px;
+}
 
-	.logout-btn {
-		margin: 40px 40px 0 40px;
-	}
+.logout-btn {
+  margin: 40px 40px 0 40px;
+}
 </style>

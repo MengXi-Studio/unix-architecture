@@ -1,0 +1,30 @@
+/**
+ * toast 平台工具：端标识与通道判定
+ */
+
+/** 获取当前端标识（uni.getSystemInfoSync().uniPlatform 实际返回 'app' / 'web' / 'mp-weixin' 等；仅用于日志与错误上报） */
+export function getPlatform(): string {
+	try {
+		const info = uni.getSystemInfoSync()
+		return info.uniPlatform
+	} catch (e) {
+		return 'unknown'
+	}
+}
+
+/**
+ * 当前端是否为自绘通道（App-Android / App-iOS / Web，v0.6 Q15）
+ *
+ * 平台归属编译期即可判定，必须用条件编译而非运行时 uniPlatform：
+ * 实测（HBuilderX 5.26 / Mi 10 Pro）uniPlatform 返回 'app'（不区分 android/ios），
+ * 若按字符串 'app-android' 匹配会把 App 端误判为原生通道，导致 position / image 被错误降级。
+ * platform 参数保留以兼容调用点签名，实现不依赖运行时值。
+ */
+export function isSelfDrawPlatform(platform: string): boolean {
+	// #ifdef APP-ANDROID || APP-IOS || WEB
+	return true
+	// #endif
+	// #ifndef APP-ANDROID || APP-IOS || WEB
+	return false
+	// #endif
+}

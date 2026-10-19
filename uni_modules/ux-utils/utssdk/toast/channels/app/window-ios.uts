@@ -1,0 +1,187 @@
+/**
+ * unix-window / App-iOS 实现
+ *
+ * 免注册直挂系统窗口（v0.7 toast 通道，showModal 等后续窗口级模块复用）：
+ * - UTSiOS.getKeyWindow() 直接拿 UIWindow，addSubview 挂视图（免注册）
+ * - mask = false：userInteractionEnabled = false 触摸穿透
+ * - mask = true：全屏蒙层视图拦截触摸（userInteractionEnabled = true）
+ * - 生命周期自管：CALayer 隐式动画渐隐、duration 计时、到期 / 主动 removeFromSuperview
+ *
+ * Swift 编译约束（来自 spike 真机验证经验）：
+ * - var 可选不做智能解包，生成代码需显式 ! 断言（existing!.text）
+ * - UIColor 使用 Swift 名称（white / black），getKeyWindow 官方返回非可空但仍留防御检查
+ * - 自定义字体 / 字号选择器（如 systemFontOfSize）未过 Xcode 编译门前不启用，避免运行时崩溃
+ * - API 采用原始类型参数：uts-proxy 不转发 type 导出，对象类型无法跨代理边界引用
+ *
+ * 注意：本文件位于共享 channels 目录（非 utssdk/app-ios 平台目录），
+ * UIKit 平台 API 依赖整体条件编译包裹，其他平台编译时整体裁剪。
+ */
+// #ifdef APP-IOS
+import { UILabel, UIColor, NSTextAlignment, UIView } from 'UIKit'
+
+/** 当前挂载的根视图（单实例复用；mask 蒙层容器与标签二选一挂载） */
+let iosRoot: UIView | null = null
+/** 卡片标签（复用时更新文案） */
+let iosLabel: UILabel | null = null
+/** 复用判定：上次挂载是否带蒙层 */
+let lastMask: boolean = false
+/** 复用判定：上次挂载的位置档位（变化需整体重建，frame 无法在复用路径修改） */
+let lastPosition: string = ''
+/** 自动隐藏计时器 id */
+let iosHideTimer: number = 0
+
+/** icon 标识映射为 emoji 字符（与 Web 通道映射保持一致） */
+function iconEmoji(icon: string): string {
+	if (icon == 'success') return '✓'
+	if (icon == 'error') return '✕'
+	if (icon == 'warning' || icon == 'exception') return '!'
+	if (icon == 'loading') return '◌'
+	return ''
+}
+
+/** 组合展示文本：图标行 + 换行 + 标题（icon 为 none 时仅标题） */
+function combinedText(icon: string, title: string): string {
+	const emoji = iconEmoji(icon)
+	if (emoji.length > 0) {
+		return emoji + '\n' + title
+	}
+	return title
+}
+
+/** 构建标签：深色圆角 + 白字居中 + 多行自适应 */
+function buildLabel(winW: number, icon: string, title: string): UILabel {
+	const label = new UILabel()
+	label.text = combinedText(icon, title)
+	label.textColor = UIColor.white
+	// 深色半透明背景（等价 Web 通道 rgba(0,0,0,0.75)）
+	label.backgroundColor = UIColor.black.colorWithAlphaComponent(0.75)
+	label.textAlignment = NSTextAlignment.center
+	label.numberOfLines = 0
+	label.layer.cornerRadius = 8.0
+	label.layer.masksToBounds = true
+	// 触摸穿透：标签不拦截任何触摸事件（蒙层拦截由根视图负责）
+	label.userInteractionEnabled = false
+	// 宽度自适应：上限 280pt、正文限宽 240pt，按内容实测高度
+	const fit = label.sizeThatFits(CGSizeMake(240.0, 9999.0))
+	let w = fit.width + 40.0
+	if (w > 280.0) {
+		w = 280.0
+	}
+	const h = fit.height + 24.0
+	const x = winW / 2.0 - w / 2.0
+	label.frame = CGRectMake(x, 0.0, w, h)
+	return label
+}
+
+/** 计算标签纵向位置（y 坐标，winH 为窗口高度） */
+function labelY(winH: number, h: number, position: string): number {
+	if (position == 'top') {
+		return winH * 0.1
+	}
+	if (position == 'center') {
+		return winH / 2.0 - h / 2.0
+	}
+	// bottom：距底 10%（与 Web 通道 10vh 一致）
+	return winH * 0.9 - h
+}
+
+/** 复用模式下更新标签文案 */
+function updateTexts(icon: string, title: string): void {
+	const label = iosLabel
+	if (label != null) {
+		label!.text = combinedText(icon, title)
+	}
+}
+
+/** 重置自动隐藏计时器 */
+function scheduleHide(duration: number): void {
+	if (iosHideTimer != 0) {
+		clearTimeout(iosHideTimer)
+	}
+	iosHideTimer = setTimeout(() => {
+		iosHideTimer = 0
+		hideWindowToast()
+	}, duration)
+}
+
+/**
+ * 直挂窗口展示 Toast（duration 到期自动隐藏）
+ * @param title 提示内容
+ * @param icon 图标标识（success / error / warning / loading / none，已由库内归一化）
+ * @param mask 是否显示蒙层（true 时拦截触摸，false 时触摸穿透）
+ * @param duration 展示时长（毫秒），插件内部计时到期自动隐藏
+ * @param position 位置（top / center / bottom）
+ * @param fail 失败回调（keyWindow 缺失 / 挂窗异常时触发）
+ */
+export function showWindowToast(title: string, icon: string, mask: boolean, duration: number, position: string, fail: ((errMsg: string) => void) | null): void {
+	const win = UTSiOS.getKeyWindow()
+	if (win == null) {
+		if (fail != null) fail('getKeyWindow() 为 null，无法挂载')
+		return
+	}
+	try {
+		const winW = win.bounds.width
+		const winH = win.bounds.height
+		const existing = iosRoot
+		const maskChanged = lastMask != mask
+		// 位置档位变化时 frame 无法在复用路径修改，需整体重建
+		const positionChanged = lastPosition != position
+		// 复用：蒙层 / 位置不变且非"从无图标变有图标"时仅更新文案
+		const needRebuildForIcon = iosLabel == null && iconEmoji(icon).length > 0
+		if (existing != null && !maskChanged && !positionChanged && !needRebuildForIcon) {
+			updateTexts(icon, title)
+			scheduleHide(duration)
+			return
+		}
+		// 蒙层 / 位置 / 图标缺失变化：先立即移除旧根
+		if (existing != null) {
+			existing!.removeFromSuperview()
+			iosRoot = null
+			iosLabel = null
+		}
+		const label = buildLabel(winW, icon, title)
+		label.frame = CGRectMake(label.frame.origin.x, labelY(winH, label.frame.size.height, position), label.frame.size.width, label.frame.size.height)
+		if (mask) {
+			// 全屏蒙层：拦截触摸（userInteractionEnabled 默认 true）
+			const root = new UIView()
+			root.frame = CGRectMake(0.0, 0.0, winW, winH)
+			root.backgroundColor = UIColor.black.colorWithAlphaComponent(0.5)
+			root.addSubview(label)
+			win.addSubview(root)
+			iosRoot = root
+		} else {
+			win.addSubview(label)
+			iosRoot = label
+		}
+		iosLabel = label
+		lastMask = mask
+		lastPosition = position
+		scheduleHide(duration)
+	} catch (e) {
+		if (fail != null) fail('挂窗异常: ' + e.message)
+	}
+}
+
+/**
+ * 隐藏直挂窗口 Toast（CALayer 隐式动画渐隐后移除）
+ */
+export function hideWindowToast(): void {
+	if (iosHideTimer != 0) {
+		clearTimeout(iosHideTimer)
+		iosHideTimer = 0
+	}
+	const root = iosRoot
+	const label = iosLabel
+	if (root == null) {
+		return
+	}
+	// 引用先置空，避免连续调用 / 复用判定异常；闭包持有本次视图完成动画后移除
+	iosRoot = null
+	iosLabel = null
+	// 退出动画：CALayer 隐式动画渐隐（若不生效则直接消失，不影响移除）
+	label!.layer.opacity = 0.0
+	setTimeout(() => {
+		root!.removeFromSuperview()
+	}, 300)
+}
+// #endif

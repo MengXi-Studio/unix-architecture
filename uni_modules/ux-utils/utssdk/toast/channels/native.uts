@@ -1,0 +1,79 @@
+/**
+ * uni 原生通道（微信 / 鸿蒙等；v0.6 起 Web 走自绘通道不再经过此处）
+ *
+ * 直接调用 uni.showToast / uni.hideToast，
+ * 并将原生 fail 回调转换为结构化 ToastFail。
+ *
+ * 类型注意（UTS 编译约束实测）：
+ * - 回调参数标注官方类型：fail 用 ShowToastFail（type alias，属性可访问）；
+ *   success 的 ShowToastSuccess 为 interface，UTS 下属性访问受限，
+ *   故成功 errMsg 取固定值 'showToast:ok'（官方 ShowToastSuccessImpl 默认值，语义等价）
+ * - icon / position 为字符串字面量联合类型（v0.8 起，UTS enum 无法跨 uts-proxy 导出），
+ *   显式映射保持官方字符串约束（不依赖隐式传递）
+ */
+import type { NormalizedOptions, ToastFail, ToastResult } from '../types'
+import type { ToastIcon, ToastPosition } from '../enums'
+import { ERR_PARAM_INVALID } from '../enums'
+import { TOAST_ERR_SUBJECT } from '../constants'
+import { getPlatform } from '../utils'
+
+/**
+ * icon 字面量转官方字符串（映射与自绘通道一致）
+ * 命名红线：插件全部 .uts 合并同一 Kotlin package，禁止与其他文件的
+ * 同名 top-level 符号（否则被静默 mangle 成 xxx__1）
+ */
+function iconToNativeString(icon: ToastIcon): string {
+	if (icon == 'success') return 'success'
+	if (icon == 'error') return 'error'
+	if (icon == 'loading') return 'loading'
+	return 'none'
+}
+
+/** position 字面量转官方字符串（null 透传，与官方 position: string | null 对齐） */
+function positionToNativeString(position: ToastPosition): string {
+	if (position == 'top') return 'top'
+	if (position == 'center') return 'center'
+	return 'bottom'
+}
+
+/**
+ * 通过 uni 原生通道展示 toast
+ * @param options 归一化后的选项
+ */
+export function showNative(options: NormalizedOptions): void {
+	const platform = getPlatform()
+	uni.showToast({
+		title: options.title,
+		icon: iconToNativeString(options.icon),
+		image: options.image,
+		mask: options.mask,
+		duration: options.duration,
+		position: options.position == null ? null : positionToNativeString(options.position),
+		success: () => {
+			if (options.success != null) {
+				const r: ToastResult = { errMsg: 'showToast:ok' }
+				options.success(r)
+			}
+		},
+		fail: (err: ShowToastFail) => {
+			if (options.fail != null) {
+				const f: ToastFail = {
+					errCode: ERR_PARAM_INVALID,
+					errSubject: TOAST_ERR_SUBJECT,
+					errMsg: err.errMsg,
+					param: null,
+					platform: platform
+				}
+				options.fail(f)
+			}
+		},
+		complete: (res: any) => {
+			if (options.complete != null) options.complete(res)
+		}
+	})
+}
+
+/** 通过 uni 原生通道隐藏 toast */
+export function hideNative(): void {
+	uni.hideToast()
+}

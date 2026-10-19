@@ -1,0 +1,15 @@
+/**
+ * toast 失败码
+ *
+ * 对齐官方 UTS 插件错误码模式（数字字面量联合类型）：
+ * 官方模板 export type MyApiErrorCode = 9010001 | 9010002
+ */
+
+/** toast 失败码 */
+export type ToastErrorCode = 1001 | 2001
+
+/** 参数非法（如 image 传 gif 于原生通道 App 端）；值须与入口内联字面量一致 */
+export const ERR_PARAM_INVALID: ToastErrorCode = 1001
+
+/** 参数当前端不支持且已降级（info 级，不阻断展示）；值须与入口内联字面量一致 */
+export const ERR_PLATFORM_UNSUPPORTED: ToastErrorCode = 2001

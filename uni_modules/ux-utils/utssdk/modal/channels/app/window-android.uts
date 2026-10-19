@@ -1,0 +1,457 @@
+/**
+ * unix-window / App-Android 实现 —— modal 直挂系统窗口（v0.2.0 modal 自绘通道）
+ *
+ * 双独立子窗口架构（对齐 toast v0.7.1 实测定稿）：
+ * - 蒙层窗口：MATCH_PARENT + FLAG_NOT_FOCUSABLE | FLAG_NOT_TOUCH_MODAL（不加
+ *   NOT_TOUCHABLE），先挂（位于下层），吃掉全部触摸实现拦截语义；点击蒙层不关闭
+ * - 卡片窗口：WRAP_CONTENT + CENTER gravity + 可聚焦可触摸，后挂（位于上层），
+ *   含标题 / 正文 / 输入框 / 按钮行；可聚焦使返回键可被根视图 OnKeyListener 拦截
+ * - 返回键：卡片根视图 setFocusableInTouchMode + setOnKeyListener，
+ *   KEYCODE_BACK → cancel = true（对齐原生 uni.showModal 行为）
+ * - 连续调用：后替前——立即移除旧弹窗再挂新弹窗（与 Web 通道一致）
+ * - 滚动阈值：正文实测高度超过屏高 BUILTIN_MAX_CONTENT_HEIGHT_PERCENT% 才套
+ *   ScrollView 限高滚动，短内容无滚动条
+ * - editable 语义对齐微信官方：content 作为输入框初始值，光标定位末尾
+ * - 颜色：#RRGGBB / #RRGGBBAA 全生效（Android 8 位色为 AARRGGBB 序，库内
+ *   #RRGGBBAA 为 RGBA 序，需手动解析后经 Color.argb 组装）
+ * - 挂窗失败由调用方（self-draw.uts）降级 uni.showModal + fail 2001 留痕
+ *
+ * 类型转换注意（UTS 编译约束，同 toast 通道）：
+ * - number → Float 用 .toFloat()，number → Int 用 .toInt()
+ * - 可变全局可空变量判空后须先赋局部变量再用（Kotlin smart cast 限制）
+ * - 监听器采用显式类实现原生接口（UTS 不支持 Kotlin 匿名对象表达式，
+ *   官方范式：import 接口 + class implements + override 方法 + 参数可空形式），
+ *   options 经构造器持有，避免闭包捕获
+ *
+ * 命名红线：本插件全部 .uts 合并同一 Kotlin package，所有 top-level 符号
+ * 一律 modal 前缀，与 toast 通道（dp2pxI / buildCard / showWindowToast 等）区分。
+ *
+ * 注意：本文件位于共享 channels 目录（非 utssdk/app-android 平台目录），
+ * android.* 平台 API 依赖整体条件编译包裹，其他平台编译时整体裁剪。
+ */
+// #ifdef APP-ANDROID
+import Activity from 'android.app.Activity'
+import Context from 'android.content.Context'
+import WindowManager from 'android.view.WindowManager'
+import View from 'android.view.View'
+import Gravity from 'android.view.Gravity'
+import KeyEvent from 'android.view.KeyEvent'
+import PixelFormat from 'android.graphics.PixelFormat'
+import Color from 'android.graphics.Color'
+import Typeface from 'android.graphics.Typeface'
+import TextView from 'android.widget.TextView'
+import EditText from 'android.widget.EditText'
+import LinearLayout from 'android.widget.LinearLayout'
+import ScrollView from 'android.widget.ScrollView'
+import FrameLayout from 'android.widget.FrameLayout'
+import GradientDrawable from 'android.graphics.drawable.GradientDrawable'
+import TypedValue from 'android.util.TypedValue'
+import OnClickListener from 'android.view.View.OnClickListener'
+import OnKeyListener from 'android.view.View.OnKeyListener'
+
+import type { NormalizedModalOptions, ModalResult } from '../../types'
+import { BUILTIN_CONFIRM_COLOR, BUILTIN_CANCEL_COLOR, BUILTIN_MAX_CONTENT_HEIGHT_PERCENT } from '../../constants'
+
+/** 当前挂载的卡片窗口视图（可聚焦，承载返回键拦截与按钮回调） */
+let modalCardRoot: View | null = null
+/** 当前挂载的蒙层窗口视图（全屏拦截触摸，点击不关闭） */
+let modalMaskRoot: View | null = null
+/** 卡片内输入框（editable 时非空，确认时取值） */
+let modalInput: EditText | null = null
+
+/** dp → px（Int，用于 padding / margin / 高度等整型参数） */
+function modalDp2pxI(activity: Activity, dp: number): Int {
+	const density = Number.from(activity.getResources().getDisplayMetrics().density)
+	return (dp * density).toInt()
+}
+
+/** dp → px（Float，用于 setCornerRadius 等浮点参数） */
+function modalDp2pxF(activity: Activity, dp: number): Float {
+	const density = Number.from(activity.getResources().getDisplayMetrics().density)
+	return (dp * density).toFloat()
+}
+
+/** 单个 16 进制字符转数值（0-15，非法字符按 0 处理；归一化层已保证合法） */
+function modalHexVal(c: string): number {
+	const code = c.charCodeAt(0)
+	if (code == null) return 0
+	if (code >= 48 && code <= 57) return code - 48
+	if (code >= 65 && code <= 70) return code - 55
+	if (code >= 97 && code <= 102) return code - 87
+	return 0
+}
+
+/**
+ * 库内 #RRGGBB / #RRGGBBAA（RGBA 序）色值解析为 Android Color Int
+ * （Android 8 位色原生为 AARRGGBB 序，不能直接 Color.parseColor，手动组装）
+ * @param value 归一化后的颜色值（null 表示未传）
+ * @param fallback 解析失败时的兜底色
+ */
+function parseModalColorInt(value: string | null, fallback: Int): Int {
+	if (value == null) return fallback
+	const hex = value.substring(1)
+	let r = 0
+	let g = 0
+	let b = 0
+	let a = 255
+	if (hex.length == 6) {
+		r = modalHexVal(hex.charAt(0)) * 16 + modalHexVal(hex.charAt(1))
+		g = modalHexVal(hex.charAt(2)) * 16 + modalHexVal(hex.charAt(3))
+		b = modalHexVal(hex.charAt(4)) * 16 + modalHexVal(hex.charAt(5))
+	} else if (hex.length == 8) {
+		r = modalHexVal(hex.charAt(0)) * 16 + modalHexVal(hex.charAt(1))
+		g = modalHexVal(hex.charAt(2)) * 16 + modalHexVal(hex.charAt(3))
+		b = modalHexVal(hex.charAt(4)) * 16 + modalHexVal(hex.charAt(5))
+		a = modalHexVal(hex.charAt(6)) * 16 + modalHexVal(hex.charAt(7))
+	} else {
+		return fallback
+	}
+	// Android Color.argb 要求 4 个 Int：number 域完成解析运算后统一显式转换（避免 Int/Number 混合运算）
+	return Color.argb(a.toInt(), r.toInt(), g.toInt(), b.toInt())
+}
+
+/** 构建全屏蒙层视图（拦截触摸；视觉 rgba(0,0,0,0.5) 对齐 Web 通道） */
+function buildModalMask(activity: Activity): FrameLayout {
+	const root = new FrameLayout(activity)
+	const dim = new GradientDrawable()
+	dim.setColor(Color.parseColor('#80000000'))
+	root.setBackground(dim)
+	return root
+}
+
+/** 构建按钮 TextView：16sp 居中，颜色走库内解析（#RRGGBBAA 全生效） */
+function buildModalButton(activity: Activity, text: string, colorHex: string): TextView {
+	const btn = new TextView(activity)
+	btn.setText(text)
+	btn.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16.0.toFloat())
+	btn.setGravity(Gravity.CENTER)
+	btn.setTextColor(parseModalColorInt(colorHex, Color.parseColor(BUILTIN_CONFIRM_COLOR)))
+	return btn
+}
+
+/** 按钮布局参数：等宽（weight 1）× 40dp 高 */
+function modalButtonParams(activity: Activity): LinearLayout.LayoutParams {
+	const lp = new LinearLayout.LayoutParams(0, modalDp2pxI(activity, 40.0))
+	lp.weight = 1.0.toFloat()
+	return lp
+}
+
+/** 顶部间距布局参数（MATCH_PARENT × WRAP_CONTENT + topMargin） */
+function modalRowLp(activity: Activity, topMarginDp: number): LinearLayout.LayoutParams {
+	const lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+	lp.topMargin = modalDp2pxI(activity, topMarginDp)
+	return lp
+}
+
+/**
+ * modal 按钮点击监听器（取消 / 确认共用）
+ * UTS 不支持 Kotlin 匿名对象表达式，以显式类实现 View.OnClickListener，
+ * options 经构造器持有（跟随官方范式：override 方法参数用可空形式 v?: View）
+ */
+class ModalButtonClickListener implements OnClickListener {
+	private modalOptions: NormalizedModalOptions
+	private isConfirm: boolean
+
+	constructor(options: NormalizedModalOptions, confirm: boolean) {
+		this.modalOptions = options
+		this.isConfirm = confirm
+	}
+
+	override onClick(v?: View): void {
+		finishWindowModal(this.modalOptions, this.isConfirm)
+	}
+}
+
+/**
+ * modal 返回键监听器：卡片根视图聚焦时拦截 KEYCODE_BACK，
+ * 按下动作以取消语义关闭弹窗（对齐 uni.showModal Android 行为）
+ */
+class ModalBackKeyListener implements OnKeyListener {
+	private modalOptions: NormalizedModalOptions
+
+	constructor(options: NormalizedModalOptions) {
+		this.modalOptions = options
+	}
+
+	override onKey(v?: View, keyCode: Int, event?: KeyEvent): boolean {
+		const ev = event
+		if (ev == null) return false
+		if (keyCode == KeyEvent.KEYCODE_BACK && ev.getAction() == KeyEvent.ACTION_DOWN) {
+			finishWindowModal(this.modalOptions, false)
+			return true
+		}
+		return false
+	}
+}
+
+/**
+ * 构建 modal 卡片：白色圆角 LinearLayout，标题 / 正文（或输入框）/ 按钮行
+ * - 正文超过内置阈值（屏高 BUILTIN_MAX_CONTENT_HEIGHT_PERCENT%）套 ScrollView 限高
+ * - editable 时 content 作为输入框初始值并 setSelection 定位末尾
+ */
+function buildModalCard(activity: Activity, options: NormalizedModalOptions): LinearLayout {
+	const card = new LinearLayout(activity)
+	card.setOrientation(LinearLayout.VERTICAL)
+	const bg = new GradientDrawable()
+	bg.setColor(Color.WHITE)
+	bg.setCornerRadius(modalDp2pxF(activity, 12.0))
+	card.setBackground(bg)
+	const padH = modalDp2pxI(activity, 20.0)
+	card.setPadding(padH, modalDp2pxI(activity, 24.0), padH, modalDp2pxI(activity, 16.0))
+	card.setMinimumWidth(modalDp2pxI(activity, 280.0))
+
+	// 标题：bold 居中（空则不渲染）
+	if (options.title.length > 0) {
+		const title = new TextView(activity)
+		title.setTextColor(Color.parseColor('#111111'))
+		title.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17.0.toFloat())
+		title.setTypeface(Typeface.DEFAULT_BOLD)
+		title.setGravity(Gravity.CENTER)
+		title.setText(options.title)
+		card.addView(title, modalRowLp(activity, 0.0))
+	}
+
+	if (options.editable) {
+		// 输入框：content 作为初始值（微信官方语义），光标定位末尾
+		const input = new EditText(activity)
+		input.setText(options.content)
+		input.setSelection(options.content.length.toInt())
+		input.setSingleLine(true)
+		input.setTextColor(Color.parseColor('#333333'))
+		input.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0.toFloat())
+		input.setHintTextColor(Color.parseColor('#999999'))
+		if (options.placeholderText != null) {
+			input.setHint(options.placeholderText!)
+		}
+		const inputBg = new GradientDrawable()
+		inputBg.setColor(Color.WHITE)
+		inputBg.setCornerRadius(modalDp2pxF(activity, 4.0))
+		inputBg.setStroke(modalDp2pxI(activity, 1.0), Color.parseColor('#DDDDDD'))
+		input.setBackground(inputBg)
+		const vPad = modalDp2pxI(activity, 8.0)
+		input.setPadding(vPad, vPad, vPad, vPad)
+		input.setMinimumHeight(modalDp2pxI(activity, 36.0))
+		card.addView(input, modalRowLp(activity, 12.0))
+		modalInput = input
+	} else if (options.content.length > 0) {
+		// 正文：实测高度超过内置阈值才套 ScrollView 限高滚动（短内容无滚动条）
+		const contentTv = new TextView(activity)
+		contentTv.setTextColor(Color.parseColor('#666666'))
+		contentTv.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14.0.toFloat())
+		contentTv.setGravity(Gravity.CENTER)
+		contentTv.setText(options.content)
+		// 按正文可用宽度（卡片 280dp - 左右 padding 20dp）测多行实际高度
+		const wSpec = View.MeasureSpec.makeMeasureSpec(modalDp2pxI(activity, 240.0), View.MeasureSpec.AT_MOST)
+		contentTv.measure(wSpec, 0)
+		const measuredHeight = contentTv.getMeasuredHeight()
+		const metrics = activity.getResources().getDisplayMetrics()
+		const maxContentPx = (Number.from(metrics.heightPixels) * (BUILTIN_MAX_CONTENT_HEIGHT_PERCENT / 100.0)).toInt()
+		if (measuredHeight > maxContentPx) {
+			const sv = new ScrollView(activity)
+			sv.setVerticalScrollBarEnabled(true)
+			const svLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, maxContentPx)
+			svLp.topMargin = modalDp2pxI(activity, 8.0)
+			sv.setLayoutParams(svLp)
+			const innerLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+			sv.addView(contentTv, innerLp)
+			card.addView(sv)
+		} else {
+			card.addView(contentTv, modalRowLp(activity, 8.0))
+		}
+	} else {
+		modalInput = null
+	}
+
+	// 按钮行：取消在左、确认在右（确认按钮统一放置在右侧）
+	const row = new LinearLayout(activity)
+	row.setOrientation(LinearLayout.HORIZONTAL)
+	row.setLayoutParams(modalRowLp(activity, 20.0))
+	if (options.showCancel) {
+		const cancelColor = options.cancelColor != null ? options.cancelColor : BUILTIN_CANCEL_COLOR
+		const cancelBtn = buildModalButton(activity, options.cancelText, cancelColor)
+		cancelBtn.setOnClickListener(new ModalButtonClickListener(options, false))
+		row.addView(cancelBtn, modalButtonParams(activity))
+	}
+	const confirmColor = options.confirmColor != null ? options.confirmColor : BUILTIN_CONFIRM_COLOR
+	const confirmBtn = buildModalButton(activity, options.confirmText, confirmColor)
+	confirmBtn.setOnClickListener(new ModalButtonClickListener(options, true))
+	row.addView(confirmBtn, modalButtonParams(activity))
+	card.addView(row)
+	return card
+}
+
+/**
+ * 结束弹窗：先取输入值再隐藏视图，最后触发 success / complete 回调
+ * @param options 归一化后的选项
+ * @param confirm true 确认 / false 取消或返回键
+ */
+function finishWindowModal(options: NormalizedModalOptions, confirm: boolean): void {
+	// 先取值再关闭（隐藏路径会清空视图引用）
+	let content: string | null = null
+	if (confirm && options.editable) {
+		const input = modalInput
+		content = input != null ? input.getText().toString() : ''
+	}
+	hideWindowModalViews()
+	if (options.success == null) return
+	const r: ModalResult = {
+		confirm: confirm,
+		cancel: !confirm,
+		content: content
+	}
+	options.success(r)
+	if (options.complete != null) options.complete(r)
+}
+
+/** 渐隐并移除当前弹窗（卡片与蒙层），引用先置空再异步移除 */
+function hideWindowModalViews(): void {
+	const card = modalCardRoot
+	const mask = modalMaskRoot
+	if (card == null && mask == null) {
+		return
+	}
+	// 引用先置空，避免连续调用 / 复用判定异常；闭包持有本次视图完成动画后移除
+	modalCardRoot = null
+	modalMaskRoot = null
+	modalInput = null
+	const act = UTSAndroid.getUniActivity()
+	if (act == null) {
+		return
+	}
+	const activity = act as Activity
+	activity.runOnUiThread(() => {
+		try {
+			if (card != null) {
+				card.animate().alpha(0.0.toFloat()).setDuration(200).start()
+			}
+			if (mask != null) {
+				mask.animate().alpha(0.0.toFloat()).setDuration(200).start()
+			}
+			setTimeout(() => {
+				const wm = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+				if (card != null) {
+					try {
+						wm.removeView(card)
+					} catch (e) {
+						// 视图可能已被移除，忽略
+					}
+				}
+				if (mask != null) {
+					try {
+						wm.removeView(mask)
+					} catch (e) {
+						// 视图可能已被移除，忽略
+					}
+				}
+			}, 220)
+		} catch (e) {
+			// 忽略隐藏异常
+		}
+	})
+}
+
+/** 立即移除当前弹窗（连续调用后替前场景，无动画；须在 UI 线程调用） */
+function dismissModalImmediate(): void {
+	const card = modalCardRoot
+	const mask = modalMaskRoot
+	modalCardRoot = null
+	modalMaskRoot = null
+	modalInput = null
+	const act = UTSAndroid.getUniActivity()
+	if (act == null) {
+		return
+	}
+	const activity = act as Activity
+	const wm = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+	if (card != null) {
+		try {
+			wm.removeView(card)
+		} catch (e) {
+			// 视图可能已被移除，忽略
+		}
+	}
+	if (mask != null) {
+		try {
+			wm.removeView(mask)
+		} catch (e) {
+			// 视图可能已被移除，忽略
+		}
+	}
+}
+
+/**
+ * 直挂窗口展示 modal（主线程挂窗，交互 / 返回键触发回调后自关）
+ * @param options 归一化后的选项
+ * @param fail 失败回调（activity 缺失 / token 未就绪 / 挂窗异常时触发，由调用方降级）
+ */
+export function showWindowModal(options: NormalizedModalOptions, fail: ((errMsg: string) => void) | null): void {
+	const act = UTSAndroid.getUniActivity()
+	if (act == null) {
+		if (fail != null) fail('getUniActivity() 为 null，无法挂窗')
+		return
+	}
+	const activity = act as Activity
+	activity.runOnUiThread(() => {
+		try {
+			// 连续调用：后替前——立即移除旧弹窗（无动画）
+			dismissModalImmediate()
+			// 子窗口必须绑定 Activity 窗口 token，页面就绪后才有效
+			const token = activity.getWindow().getDecorView().getWindowToken()
+			if (token == null) {
+				if (fail != null) fail('windowToken 为 null（页面未就绪），无法挂窗')
+				return
+			}
+			const wm = activity.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+			// 蒙层窗口（先挂，位于下层）：全屏拦截触摸；点击蒙层不关闭（统一交互）
+			const maskParams = new WindowManager.LayoutParams()
+			maskParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
+			// 不加 FLAG_NOT_TOUCHABLE：蒙层吃掉全部触摸，实现拦截语义
+			maskParams.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+				| WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+			maskParams.format = PixelFormat.TRANSLUCENT
+			maskParams.width = WindowManager.LayoutParams.MATCH_PARENT
+			maskParams.height = WindowManager.LayoutParams.MATCH_PARENT
+			maskParams.token = token
+			const maskView = buildModalMask(activity)
+			wm.addView(maskView, maskParams)
+			modalMaskRoot = maskView
+			// 卡片窗口（后挂，位于上层）：可聚焦可触摸（无 flags），支持返回键拦截
+			const cardParams = new WindowManager.LayoutParams()
+			cardParams.type = WindowManager.LayoutParams.TYPE_APPLICATION_PANEL
+			cardParams.format = PixelFormat.TRANSLUCENT
+			cardParams.width = WindowManager.LayoutParams.WRAP_CONTENT
+			cardParams.height = WindowManager.LayoutParams.WRAP_CONTENT
+			cardParams.gravity = Gravity.CENTER
+			if (options.editable) {
+				// editable：弹出输入法，平移模式避免卡片被键盘顶出屏幕
+				cardParams.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
+					| WindowManager.LayoutParams.SOFT_INPUT_ADJUST_PAN
+			}
+			cardParams.token = token
+			const card = buildModalCard(activity, options)
+			// 返回键关闭（cancel = true）：根视图可聚焦后监听 KEYCODE_BACK
+			card.setFocusableInTouchMode(true)
+			card.setOnKeyListener(new ModalBackKeyListener(options))
+			wm.addView(card, cardParams)
+			modalCardRoot = card
+			// 进入动画：卡片（与蒙层）透明度渐显
+			card.setAlpha(0.0.toFloat())
+			card.animate().alpha(1.0.toFloat()).setDuration(200).start()
+			maskView.setAlpha(0.0.toFloat())
+			maskView.animate().alpha(1.0.toFloat()).setDuration(200).start()
+			// 焦点：editable 给输入框（IME 随 SOFT_INPUT_STATE_VISIBLE 弹出），否则给卡片根视图
+			if (options.editable) {
+				const input = modalInput
+				if (input != null) {
+					input.requestFocus()
+				}
+			} else {
+				card.requestFocus()
+			}
+			console.log('[unix-modal] addView 成功 editable=' + options.editable + ' showCancel=' + options.showCancel)
+		} catch (e) {
+			if (fail != null) fail('挂窗异常: ' + e.message)
+		}
+	})
+}
+// #endif

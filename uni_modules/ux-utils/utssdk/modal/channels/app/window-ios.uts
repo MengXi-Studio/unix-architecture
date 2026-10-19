@@ -1,0 +1,316 @@
+/**
+ * unix-window / App-iOS 实现 —— modal 直挂 UIWindow（v0.2.0 modal 自绘通道）
+ *
+ * 单视图树架构（对齐 toast 通道 getKeyWindow + addSubview 免注册模式）：
+ * - 全屏蒙层 UIView（黑 0.5 拦截触摸，点击蒙层不关闭）内含居中卡片
+ *   （白底圆角 12pt），单引用便于整体移除
+ * - 无返回键拦截语义（iOS 无硬件返回键，蒙层点击不关闭，交互以按钮为准）
+ * - 连续调用：后替前——立即移除旧弹窗再挂新弹窗（与 Web 通道一致）
+ * - 滚动阈值：正文 sizeThatFits 实测高度超过屏高
+ *   BUILTIN_MAX_CONTENT_HEIGHT_PERCENT% 才套 UIScrollView 限高滚动
+ * - editable 语义对齐微信官方：content 作为输入框初始值，
+ *   becomeFirstResponder 后 selectedTextRange 定位到文档末尾
+ * - 颜色：#RRGGBB / #RRGGBBAA 全生效（RGBA 序手动解析后经 UIColor 组装；
+ *   库内固定色用 UTSiOS.colorWithString）
+ *
+ * Swift 编译约束（继承 toast 通道真机验证经验）：
+ * - 命名参数用 = 形式（如 UIFont.systemFont(ofSize = 14.0)）
+ * - var 可选不做智能解包，读取需显式 ! 断言（input!.text）
+ * - UIColor 使用 Swift 名称（white / black）
+ * - target-action：selector 用 Selector("方法名") 构建，回调方法加 @objc 前缀
+ * - API 采用原始类型参数：uts-proxy 不转发 type 导出，对象类型无法跨代理边界引用
+ *
+ * 命名红线：本插件全部 .uts 合并编译，top-level 符号与 Android 通道同处于
+ * 各自平台的编译目标（#ifdef 互斥裁剪），保留与 Android 对称的简洁命名。
+ *
+ * 注意：本文件位于共享 channels 目录（非 utssdk/app-ios 平台目录），
+ * UIKit 平台 API 依赖整体条件编译包裹，其他平台编译时整体裁剪。
+ */
+// #ifdef APP-IOS
+import { UIWindow, UIView, UILabel, UIColor, UITextField, UIScrollView, UITapGestureRecognizer, NSTextAlignment, UIFont } from 'UIKit'
+import { NSObject } from 'Foundation'
+
+import type { NormalizedModalOptions, ModalResult } from '../../types'
+import { BUILTIN_CONFIRM_COLOR, BUILTIN_CANCEL_COLOR, BUILTIN_MAX_CONTENT_HEIGHT_PERCENT } from '../../constants'
+
+/** 当前挂载的根视图（蒙层容器，内含卡片；单引用整体移除） */
+let modalIosRoot: UIView | null = null
+/** 卡片内输入框（editable 时非空，确认时取值） */
+let modalIosInput: UITextField | null = null
+
+/**
+ * 手势回调处理类（target-action 模式：@objc 方法 + Selector 构建）
+ * 每个按钮独立实例，携带本次弹窗选项与按钮语义
+ */
+class ModalTapHandler extends NSObject {
+	/** 是否确认按钮 */
+	confirmFlag: boolean = false
+	/** 本次弹窗的归一化选项 */
+	optionsRef: NormalizedModalOptions | null = null
+
+	/** 点击回调（@objc 暴露给 ObjC 运行时供 selector 调用） */
+	@objc onTapAction(): void {
+		const opts = this.optionsRef
+		if (opts != null) {
+			finishWindowModal(opts!, this.confirmFlag)
+		}
+	}
+}
+
+/** 单个 16 进制字符转数值（0-15，非法字符按 0 处理；归一化层已保证合法） */
+function modalHexValIos(c: string): number {
+	const code = c.charCodeAt(0)
+	if (code == null) return 0
+	if (code >= 48 && code <= 57) return code - 48
+	if (code >= 65 && code <= 70) return code - 55
+	if (code >= 97 && code <= 102) return code - 87
+	return 0
+}
+
+/**
+ * 库内 #RRGGBB / #RRGGBBAA（RGBA 序）色值解析为 UIColor（alpha 全生效）
+ * @param value 归一化后的颜色值（null 表示未传）
+ * @param fallback 解析失败时的兜底色
+ */
+function parseModalUIColor(value: string | null, fallback: UIColor): UIColor {
+	if (value == null) return fallback
+	const hex = value.substring(1)
+	let r = 0.0
+	let g = 0.0
+	let b = 0.0
+	let a = 1.0
+	if (hex.length == 6) {
+		r = (modalHexValIos(hex.charAt(0)) * 16 + modalHexValIos(hex.charAt(1))) / 255.0
+		g = (modalHexValIos(hex.charAt(2)) * 16 + modalHexValIos(hex.charAt(3))) / 255.0
+		b = (modalHexValIos(hex.charAt(4)) * 16 + modalHexValIos(hex.charAt(5))) / 255.0
+	} else if (hex.length == 8) {
+		r = (modalHexValIos(hex.charAt(0)) * 16 + modalHexValIos(hex.charAt(1))) / 255.0
+		g = (modalHexValIos(hex.charAt(2)) * 16 + modalHexValIos(hex.charAt(3))) / 255.0
+		b = (modalHexValIos(hex.charAt(4)) * 16 + modalHexValIos(hex.charAt(5))) / 255.0
+		a = (modalHexValIos(hex.charAt(6)) * 16 + modalHexValIos(hex.charAt(7))) / 255.0
+	} else {
+		return fallback
+	}
+	return new UIColor(red = r, green = g, blue = b, alpha = a)
+}
+
+/** 为视图挂轻点手势（target-action：@objc 方法 + Selector("onTapAction")） */
+function attachModalTap(view: UIView, options: NormalizedModalOptions, confirm: boolean): void {
+	const handler = new ModalTapHandler()
+	handler.confirmFlag = confirm
+	handler.optionsRef = options
+	const tap = new UITapGestureRecognizer(target = handler, action = Selector("onTapAction"))
+	view.isUserInteractionEnabled = true
+	view.addGestureRecognizer(tap)
+}
+
+/** 构建按钮 UILabel：16pt 居中，颜色走库内解析（#RRGGBBAA 全生效） */
+function buildModalButtonIos(text: string, colorHex: string): UILabel {
+	const btn = new UILabel()
+	btn.text = text
+	btn.textColor = parseModalUIColor(colorHex, parseModalUIColor(BUILTIN_CONFIRM_COLOR, UIColor.blue))
+	btn.font = UIFont.systemFont(ofSize = 16.0)
+	btn.textAlignment = NSTextAlignment.center
+	return btn
+}
+
+/**
+ * 构建 modal 蒙层（内含居中卡片）：标题 / 正文（或输入框）/ 按钮行
+ * - 正文超过内置阈值（屏高 BUILTIN_MAX_CONTENT_HEIGHT_PERCENT%）套 UIScrollView 限高
+ * - editable 时 content 作为输入框初始值（光标末尾在挂载后统一设置）
+ * @param winW 窗口宽
+ * @param winH 窗口高
+ * @param options 归一化后的选项
+ * @returns 卡片视图（未挂载）
+ */
+function buildModalCardIos(winW: number, winH: number, options: NormalizedModalOptions): UIView {
+	// 蒙层：全屏黑 0.5 拦截触摸（点击蒙层不关闭）
+	const mask = new UIView()
+	mask.frame = CGRectMake(0.0, 0.0, winW, winH)
+	mask.backgroundColor = UIColor.black.colorWithAlphaComponent(0.5)
+
+	// 卡片：白底圆角，尺寸按内容累计后居中
+	const card = new UIView()
+	card.backgroundColor = UIColor.white
+	card.layer.cornerRadius = 12.0
+	card.layer.masksToBounds = true
+
+	const padH = 20.0
+	const contentW = 240.0
+	const cardW = 280.0
+	let y = 24.0
+	let cardH = 40.0 // 顶部 24 + 底部 16
+
+	// 标题：bold 居中（空则不渲染）
+	if (options.title.length > 0) {
+		const title = new UILabel()
+		title.text = options.title
+		title.textColor = UTSiOS.colorWithString('#111111')
+		title.font = UIFont.boldSystemFont(ofSize = 17.0)
+		title.textAlignment = NSTextAlignment.center
+		title.numberOfLines = 0
+		const fit = title.sizeThatFits(CGSizeMake(contentW, 9999.0))
+		title.frame = CGRectMake(padH, y, contentW, fit.height)
+		card.addSubview(title)
+		y += fit.height + 8.0
+		cardH += fit.height + 8.0
+	}
+
+	if (options.editable) {
+		// 输入框：content 作为初始值（微信官方语义），光标末尾在挂载后设置
+		const input = new UITextField()
+		input.text = options.content
+		input.font = UIFont.systemFont(ofSize = 14.0)
+		input.textColor = UTSiOS.colorWithString('#333333')
+		if (options.placeholderText != null) {
+			input.placeholder = options.placeholderText!
+		}
+		input.backgroundColor = UTSiOS.colorWithString('#F5F5F5')
+		input.layer.cornerRadius = 4.0
+		// 左右留白
+		const wrap = new UIView()
+		wrap.frame = CGRectMake(padH, y, contentW, 36.0)
+		input.frame = CGRectMake(8.0, 0.0, contentW - 16.0, 36.0)
+		wrap.addSubview(input)
+		card.addSubview(wrap)
+		modalIosInput = input
+		y += 36.0 + 12.0
+		cardH += 48.0
+	} else if (options.content.length > 0) {
+		// 正文：实测高度超过内置阈值才套 UIScrollView 限高滚动（短内容无滚动条）
+		const content = new UILabel()
+		content.text = options.content
+		content.textColor = UTSiOS.colorWithString('#666666')
+		content.font = UIFont.systemFont(ofSize = 14.0)
+		content.textAlignment = NSTextAlignment.center
+		content.numberOfLines = 0
+		const fit = content.sizeThatFits(CGSizeMake(contentW, 9999.0))
+		const maxContentH = winH * (BUILTIN_MAX_CONTENT_HEIGHT_PERCENT / 100.0)
+		if (fit.height > maxContentH) {
+			const sv = new UIScrollView()
+			sv.frame = CGRectMake(padH, y, contentW, maxContentH)
+			sv.contentSize = CGSizeMake(contentW, fit.height)
+			sv.showsVerticalScrollIndicator = true
+			content.frame = CGRectMake(0.0, 0.0, contentW, fit.height)
+			sv.addSubview(content)
+			card.addSubview(sv)
+			y += maxContentH + 8.0
+			cardH += maxContentH + 8.0
+		} else {
+			content.frame = CGRectMake(padH, y, contentW, fit.height)
+			card.addSubview(content)
+			y += fit.height + 8.0
+			cardH += fit.height + 8.0
+		}
+	} else {
+		modalIosInput = null
+	}
+
+	// 按钮行：取消在左、确认在右（确认按钮统一放置在右侧），各占一半宽
+	const btnH = 40.0
+	const btnY = y + 20.0
+	const btnW = contentW / 2.0 - 4.0
+	cardH += 20.0 + btnH
+	if (options.showCancel) {
+		const cancelColor = options.cancelColor != null ? options.cancelColor : BUILTIN_CANCEL_COLOR
+		const cancelBtn = buildModalButtonIos(options.cancelText, cancelColor)
+		cancelBtn.frame = CGRectMake(padH, btnY, btnW, btnH)
+		attachModalTap(cancelBtn, options, false)
+		card.addSubview(cancelBtn)
+	}
+	const confirmColor = options.confirmColor != null ? options.confirmColor : BUILTIN_CONFIRM_COLOR
+	const confirmBtn = buildModalButtonIos(options.confirmText, confirmColor)
+	confirmBtn.frame = CGRectMake(padH + contentW / 2.0 + 4.0, btnY, btnW, btnH)
+	attachModalTap(confirmBtn, options, true)
+	card.addSubview(confirmBtn)
+
+	// 卡片居中（尺寸累计完成后定位）
+	card.frame = CGRectMake(winW / 2.0 - cardW / 2.0, winH / 2.0 - cardH / 2.0, cardW, cardH)
+	mask.addSubview(card)
+	return mask
+}
+
+/**
+ * 结束弹窗：先取输入值再隐藏视图，最后触发 success / complete 回调
+ * @param options 归一化后的选项
+ * @param confirm true 确认 / false 取消
+ */
+function finishWindowModal(options: NormalizedModalOptions, confirm: boolean): void {
+	// 先取值再关闭（隐藏路径会清空视图引用）
+	let content: string | null = null
+	if (confirm && options.editable) {
+		const input = modalIosInput
+		content = input != null ? input!.text : ''
+	}
+	hideModalIosViews()
+	if (options.success == null) return
+	const r: ModalResult = {
+		confirm: confirm,
+		cancel: !confirm,
+		content: content
+	}
+	options.success(r)
+	if (options.complete != null) options.complete(r)
+}
+
+/** 渐隐并移除当前弹窗（CALayer 隐式动画后整体移除），引用先置空 */
+function hideModalIosViews(): void {
+	const root = modalIosRoot
+	if (root == null) {
+		return
+	}
+	// 引用先置空，避免连续调用判定异常；闭包持有本次视图完成动画后移除
+	modalIosRoot = null
+	modalIosInput = null
+	root!.layer.opacity = 0.0
+	setTimeout(() => {
+		root!.removeFromSuperview()
+	}, 300)
+}
+
+/** 立即移除当前弹窗（连续调用后替前场景，无动画） */
+function dismissModalIosImmediate(): void {
+	const root = modalIosRoot
+	if (root == null) {
+		return
+	}
+	modalIosRoot = null
+	modalIosInput = null
+	root!.removeFromSuperview()
+}
+
+/**
+ * 直挂窗口展示 modal（交互触发回调后自关）
+ * @param options 归一化后的选项
+ * @param fail 失败回调（keyWindow 缺失 / 挂载异常时触发，由调用方降级）
+ */
+export function showWindowModal(options: NormalizedModalOptions, fail: ((errMsg: string) => void) | null): void {
+	const win = UTSiOS.getKeyWindow()
+	if (win == null) {
+		if (fail != null) fail('getKeyWindow() 为 null，无法挂载')
+		return
+	}
+	try {
+		// 连续调用：后替前——立即移除旧弹窗（无动画）
+		dismissModalIosImmediate()
+		const winW = win.bounds.width
+		const winH = win.bounds.height
+		// 蒙层（内含卡片）整体挂到 keyWindow
+		const root = buildModalCardIos(winW, winH, options)
+		win.addSubview(root)
+		modalIosRoot = root
+		// editable：聚焦输入框并把光标定位到内容末尾
+		if (options.editable) {
+			const input = modalIosInput
+			if (input != null) {
+				input!.becomeFirstResponder()
+				const endPos = input!.endOfDocument
+				input!.selectedTextRange = input!.textRange(from = endPos, to = endPos)
+			}
+		}
+		console.log('[unix-modal] addSubview 成功 editable=' + options.editable + ' showCancel=' + options.showCancel)
+	} catch (e) {
+		if (fail != null) fail('挂载异常: ' + e.message)
+	}
+}
+// #endif

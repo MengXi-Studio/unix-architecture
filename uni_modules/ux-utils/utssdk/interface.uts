@@ -1,0 +1,233 @@
+/**
+ * unix-utils 对外 API 声明（interface.uts，官方必需）
+ *
+ * 「声明和实现」分层（官方 UTS 插件架构）：
+ * - 本文件内联声明全部对外类型，供 uts-proxy V1 生成参数编码与
+ *   HBuilderX 语法提示（parseInterfaceTypes 仅解析本文件的内联声明）
+ * - 对外 API 在各平台 index.uts 内联声明（V1 代理只解析平台入口的
+ *   内联 export function / export const，re-export 链不可见，v0.8 实测）
+ * - 实现层类型见 utssdk/toast/types（与本文件符号名保持一致，避免双重
+ *   维护漂移：修改任一侧必须同步另一侧）
+ *
+ * v0.8 注意：UTS enum 无法跨 uts-proxy 代理边界（代理模块仅含函数与
+ * 原始类型常量），icon / position / 错误码均为字面量联合类型。
+ */
+
+/** toast 图标（对齐 uni.showToast 官方 icon 参数并扩展 fail / exception / warning） */
+export type ToastIcon = 'success' | 'error' | 'fail' | 'exception' | 'warning' | 'loading' | 'none'
+
+/** toast 位置 */
+export type ToastPosition = 'top' | 'center' | 'bottom'
+
+/** toast 失败码（数字字面量联合，对齐官方错误码模式） */
+export type ToastErrorCode = 1001 | 2001
+
+/** showToast 成功回调结果（对齐原生） */
+export type ToastResult = {
+	errMsg: string
+}
+
+/** 失败结构：比原生 errCode 更结构化 */
+export type ToastFail = {
+	/** 错误码 */
+	errCode: ToastErrorCode
+	/** 固定主题，便于业务过滤 */
+	errSubject: string
+	/** 错误描述 */
+	errMsg: string
+	/** 触发问题的参数名（如 'position' / 'image' / 'icon'），无则 null */
+	param: string | null
+	/** 当前端标识（'app-android' / 'web' / 'mp-weixin' / ...） */
+	platform: string
+}
+
+/**
+ * showToast 选项：对齐 uni.showToast 全参数。
+ *
+ * 除 title 外均为可选字段（v0.8.1 实测：UTS 插件代理层对必填字段做
+ * 非空强转（null as Boolean），业务漏传即 NPE；可选字段代理层才生成
+ * null-safe 编码）。实现层（normalize 等）统一对可空值判空兜底。
+ */
+export type ToastOptions = {
+	/** 提示内容 */
+	title: string
+	/** 图标；不传或 null 表示使用全局默认（success） */
+	icon?: ToastIcon | null
+	/** 自定义图标本地路径；不传或 null 表示不使用 */
+	image?: string | null
+	/** 是否显示透明蒙层，防止触摸穿透 */
+	mask?: boolean
+	/** 提示延迟时间（毫秒），不钳制，原样透传 */
+	duration?: number
+	/** 位置；不传或 null 表示不启用 position 形态（居中普通 toast） */
+	position?: ToastPosition | null
+	/** 成功回调 */
+	success?: ((res: ToastResult) => void) | null
+	/** 失败回调（含降级通知） */
+	fail?: ((err: ToastFail) => void) | null
+	/** 结束回调（成功或失败都执行） */
+	complete?: ((res: any) => void) | null
+}
+
+/** 归一化后的内部选项（所有字段均有确定值） */
+export type NormalizedOptions = {
+	title: string
+	icon: ToastIcon
+	image: string | null
+	mask: boolean
+	duration: number
+	position: ToastPosition | null
+	success: ((res: ToastResult) => void) | null
+	fail: ((err: ToastFail) => void) | null
+	complete: ((res: any) => void) | null
+}
+
+/** 归一化结果：归一化后的选项 + 发生降级的参数名列表 */
+export type NormalizeResult = {
+	options: NormalizedOptions
+	/** 发生降级的参数名列表（如 ['position', 'icon']） */
+	degraded: string[]
+}
+
+/** 全局默认配置（configureToast 入参；字段为 null 表示沿用库内置默认） */
+export type ToastDefaults = {
+	/** 默认展示时长（毫秒） */
+	duration: number | null
+	/** 默认图标 */
+	icon: ToastIcon | null
+	/** 默认是否显示蒙层 */
+	mask: boolean | null
+}
+
+/* ============================================================
+ * API 函数类型别名（官方模式）
+ *
+ * 平台入口 index.uts 必须以 `export const apiName: ApiType =
+ * function (...) {}` 形态声明 API（对齐官方 uts-api 模板）。
+ * 实测（v0.8.1）：插件内所有 .uts 同 Kotlin package，同名 top-level
+ * 符号（含悬空调用/悬空转发解析出的孤儿符号）会触发编译器对导出符号
+ * 静默重整（showToast → showToast__1）且不报错，业务侧 import 报
+ * "xxx is not exported by ?uts-proxy"。实现层函数须加 Impl 后缀保证
+ * 符号全局唯一。
+ * 本文件的函数类型别名同时是 V1 代理生成参数编码的依据。
+ * ============================================================ */
+
+/** showToast 函数类型 */
+export type ShowToast = (options: ToastOptions) => void
+/** hideToast 函数类型 */
+export type HideToast = () => void
+/** showToastAsync 函数类型 */
+export type ShowToastAsync = (options: ToastOptions) => Promise<void>
+/** configureToast 函数类型 */
+export type ConfigureToast = (defaults: ToastDefaults) => void
+/** showToastSuccess / showToastError / showToastInfo 函数类型 */
+export type ShowToastQuick = (title: string) => void
+
+/* ============================================================
+ * modal（uni.showModal 全端兼容封装）
+ * 类型与 toast 对称：字面量联合跨 uts-proxy 边界，实现层全字段判空兜底
+ * ============================================================ */
+
+/** modal 失败码（数字字面量联合，对齐官方错误码模式） */
+export type ModalErrorCode = 1001 | 2001
+
+/** showModal 成功回调结果（库内归一化保证 confirm / cancel 恒存在且互斥） */
+export type ModalResult = {
+	/** 是否点击了确认按钮 */
+	confirm: boolean
+	/** 是否点击了取消按钮 / Android 返回键关闭 */
+	cancel: boolean
+	/** editable 为 true 时用户输入的文本；非 editable 恒 null */
+	content: string | null
+}
+
+/** 失败结构：对齐 ToastFail 范式 */
+export type ModalFail = {
+	/** 错误码 */
+	errCode: ModalErrorCode
+	/** 固定主题，便于业务过滤 */
+	errSubject: string
+	/** 错误描述 */
+	errMsg: string
+	/** 触发问题的参数名（如 'confirmColor' / 'title'），无则 null */
+	param: string | null
+	/** 当前端标识（'app-android' / 'web' / 'mp-weixin' / ...） */
+	platform: string
+}
+
+/**
+ * showModal 选项：对齐 uni.showModal 全参数。
+ *
+ * 除回调外均为可选字段（可选字段代理层才生成 null-safe 编码，
+ * 必填字段会做非空强转，业务漏传即 NPE），实现层统一判空兜底。
+ */
+export type ModalOptions = {
+	/** 标题；与 content 至少其一非空，均空 fail 1001 */
+	title?: string | null
+	/** 内容 */
+	content?: string | null
+	/** 是否显示取消按钮，默认 true */
+	showCancel?: boolean
+	/** 取消按钮文案，默认 '取消'；微信 / 鸿蒙超 4 字符库内截断 */
+	cancelText?: string | null
+	/** 取消按钮颜色（16 进制），非法值降级平台默认色 */
+	cancelColor?: string | null
+	/** 确认按钮文案，默认 '确定'；微信 / 鸿蒙超 4 字符库内截断 */
+	confirmText?: string | null
+	/** 确认按钮颜色（16 进制），非法值降级平台默认色 */
+	confirmColor?: string | null
+	/** 是否可输入，默认 false */
+	editable?: boolean
+	/** 输入框占位文本（editable 为 true 时生效） */
+	placeholderText?: string | null
+	/** 成功回调 */
+	success?: ((res: ModalResult) => void) | null
+	/** 失败回调（含降级通知） */
+	fail?: ((err: ModalFail) => void) | null
+	/** 结束回调（成功或失败都执行） */
+	complete?: ((res: any) => void) | null
+}
+
+/** 归一化后的内部选项（所有字段均有确定值；颜色 null = 透传平台默认色） */
+export type NormalizedModalOptions = {
+	title: string
+	content: string
+	showCancel: boolean
+	cancelText: string
+	cancelColor: string | null
+	confirmText: string
+	confirmColor: string | null
+	editable: boolean
+	placeholderText: string | null
+	success: ((res: ModalResult) => void) | null
+	fail: ((err: ModalFail) => void) | null
+	complete: ((res: any) => void) | null
+}
+
+/** modal 归一化结果：归一化后的选项 + 发生降级的参数名列表 */
+export type NormalizeModalResult = {
+	options: NormalizedModalOptions
+	/** 发生降级的参数名列表（如 ['confirmColor']） */
+	degraded: string[]
+}
+
+/** 全局默认配置（configureModal 入参；字段为 null 表示沿用库内置默认 / 平台默认） */
+export type ModalDefaults = {
+	/** 默认取消按钮文案 */
+	cancelText: string | null
+	/** 默认确认按钮文案 */
+	confirmText: string | null
+	/** 默认取消按钮颜色 */
+	cancelColor: string | null
+	/** 默认确认按钮颜色 */
+	confirmColor: string | null
+}
+
+/** showModal 函数类型 */
+export type ShowModal = (options: ModalOptions) => void
+/** showModalAsync 函数类型 */
+export type ShowModalAsync = (options: ModalOptions) => Promise<ModalResult>
+/** showModalAlert 函数类型 */
+export type ShowModalAlert = (title: string, content: string | null) => void
+/** configureModal 函数类型 */
+export type ConfigureModal = (defaults: ModalDefaults) => void

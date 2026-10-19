@@ -1,0 +1,11 @@
+/**
+ * toast 类型桶文件
+ */
+export type {
+	ToastOptions,
+	ToastResult,
+	ToastFail,
+	NormalizedOptions,
+	ToastDefaults,
+	NormalizeResult
+} from './toast'

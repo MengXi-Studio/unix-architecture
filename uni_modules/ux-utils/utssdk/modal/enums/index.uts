@@ -1,0 +1,11 @@
+/**
+ * modal 枚举桶文件（字面量类型 + 错误码常量）
+ */
+import type { ModalErrorCode } from './modal-error-code'
+import { MODAL_ERR_PARAM_INVALID, MODAL_ERR_PLATFORM_UNSUPPORTED } from './modal-error-code'
+
+/* 字面量类型 */
+export type { ModalErrorCode }
+
+/* 错误码常量 */
+export { MODAL_ERR_PARAM_INVALID, MODAL_ERR_PLATFORM_UNSUPPORTED }

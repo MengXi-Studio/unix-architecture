@@ -1,0 +1,131 @@
+/**
+ * modal 主流程：空参校验 → 归一化 → 通道分发 → 回调
+ *
+ * 通道分发（编译期条件编译判定，禁止运行时 uniPlatform 匹配）：
+ * - Web：DOM 自绘通道（Q2）
+ * - App（Android / iOS）：UTS 直挂系统窗口自绘通道（v0.2.0，原生 dialogPage 已退役）
+ * - 其余端（微信 / 鸿蒙）：uni.showModal 原生通道
+ */
+import type { ModalOptions, ModalResult, ModalFail, NormalizedModalOptions } from './types'
+import { MODAL_ERR_PARAM_INVALID, MODAL_ERR_PLATFORM_UNSUPPORTED } from './enums'
+import { MODAL_ERR_SUBJECT } from './constants'
+import { normalizeModal } from './utils'
+import { getPlatform } from '../toast/utils'
+import { showModalNative } from './channels/native'
+// #ifdef WEB
+import { showModalSelfDraw } from './channels/web'
+// #endif
+// #ifdef APP-ANDROID || APP-IOS
+import { showModalAppSelfDraw } from './channels/app/self-draw'
+// #endif
+
+/**
+ * 将降级参数逐一通过 fail 回调通知调用方
+ * @param options 原始用户选项
+ * @param degraded 发生降级的参数名列表
+ */
+function notifyModalDegraded(options: ModalOptions, degraded: string[]): void {
+	if (degraded.length === 0 || options.fail == null) return
+	const platform = getPlatform()
+	for (let i = 0; i < degraded.length; i++) {
+		const f: ModalFail = {
+			errCode: MODAL_ERR_PLATFORM_UNSUPPORTED,
+			errSubject: MODAL_ERR_SUBJECT,
+			errMsg: '参数在当前端不支持，已降级处理',
+			param: degraded[i],
+			platform: platform
+		}
+		options.fail(f)
+	}
+}
+
+/**
+ * 空参校验失败：title 与 content 均空，fail 1001（Q8）
+ * @param options 原始用户选项
+ */
+function notifyModalParamInvalid(options: ModalOptions): void {
+	const f: ModalFail = {
+		errCode: MODAL_ERR_PARAM_INVALID,
+		errSubject: MODAL_ERR_SUBJECT,
+		errMsg: 'title 与 content 至少其一非空',
+		param: 'title',
+		platform: getPlatform()
+	}
+	if (options.fail != null) options.fail(f)
+	if (options.complete != null) options.complete(f)
+}
+
+/**
+ * 按端分发到对应通道展示（编译期判定）
+ * @param options 归一化后的选项
+ */
+function dispatchModalShow(options: NormalizedModalOptions): void {
+	// #ifdef WEB
+	showModalSelfDraw(options)
+	// #endif
+	// #ifdef APP-ANDROID || APP-IOS
+	showModalAppSelfDraw(options)
+	// #endif
+	// #ifndef WEB || APP-ANDROID || APP-IOS
+	showModalNative(options)
+	// #endif
+}
+
+/**
+ * 展示模态弹窗（回调式，与 uni.showModal 同构，迁移零成本）
+ * @param options 选项
+ */
+export function showModalImpl(options: ModalOptions): void {
+	const title = options.title != null ? options.title : ''
+	const content = options.content != null ? options.content : ''
+	if (title.length === 0 && content.length === 0) {
+		notifyModalParamInvalid(options)
+		return
+	}
+	const result = normalizeModal(options)
+	notifyModalDegraded(options, result.degraded)
+	dispatchModalShow(result.options)
+}
+
+/**
+ * Promise 式展示模态弹窗（成功 resolve ModalResult，点取消不算失败）
+ *
+ * 失败契约（全端统一）：reject ModalFail 结构的 JSON 字符串。
+ * App端运行时 async 代理仅将 reject 值按字符串透传（HBuilderX 5.26 蒸汽
+ * 模式实测，类型化对象 / UTSJSONObject / UniError 的字段全部丢失），故
+ * 库内统一 JSON.stringify 后 reject，业务侧 JSON.parse<ModalFail>(err as string) 还原。
+ * @param options 选项
+ * @returns Promise
+ */
+export function showModalAsyncImpl(options: ModalOptions): Promise<ModalResult> {
+	return new Promise<ModalResult>((resolve, reject) => {
+		const wrapped: ModalOptions = {
+			title: options.title,
+			content: options.content,
+			showCancel: options.showCancel,
+			cancelText: options.cancelText,
+			cancelColor: options.cancelColor,
+			confirmText: options.confirmText,
+			confirmColor: options.confirmColor,
+			editable: options.editable,
+			placeholderText: options.placeholderText,
+			success: (res: ModalResult) => {
+				if (options.success != null) options.success(res)
+				resolve(res)
+			},
+			fail: (err: ModalFail) => {
+				if (options.fail != null) options.fail(err)
+				const j: UTSJSONObject = {
+					errCode: err.errCode,
+					errSubject: err.errSubject,
+					errMsg: err.errMsg,
+					param: err.param,
+					platform: err.platform
+				}
+				reject(JSON.stringify(j))
+			},
+			complete: options.complete
+		}
+		showModalImpl(wrapped)
+	})
+}

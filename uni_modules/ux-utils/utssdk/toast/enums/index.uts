@@ -1,0 +1,15 @@
+/**
+ * toast 枚举桶文件（v0.8 起为字面量类型 + 错误码常量）
+ */
+import type { ToastIcon } from './toast-icon'
+import type { ToastPosition } from './toast-position'
+import type { ToastErrorCode } from './toast-error-code'
+import { ERR_PARAM_INVALID, ERR_PLATFORM_UNSUPPORTED } from './toast-error-code'
+
+/* 字面量类型 */
+export type { ToastIcon }
+export type { ToastPosition }
+export type { ToastErrorCode }
+
+/* 错误码常量 */
+export { ERR_PARAM_INVALID, ERR_PLATFORM_UNSUPPORTED }

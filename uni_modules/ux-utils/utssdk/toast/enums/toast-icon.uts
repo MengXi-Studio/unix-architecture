@@ -1,0 +1,10 @@
+/**
+ * toast 图标字面量类型
+ *
+ * v0.8 起由 UTS enum 改为字符串字面量联合类型：实测 UTS enum 无法跨
+ * uts-proxy 代理边界导出（编译器生成的代理模块仅含函数与原始类型常量），
+ * 官方 UTS 插件模板亦不使用 enum。取值对齐 uni.showToast 官方 icon 参数并扩展。
+ */
+
+/** toast 图标 */
+export type ToastIcon = 'success' | 'error' | 'fail' | 'exception' | 'warning' | 'loading' | 'none'

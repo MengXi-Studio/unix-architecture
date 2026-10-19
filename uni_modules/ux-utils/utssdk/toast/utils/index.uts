@@ -1,0 +1,5 @@
+/**
+ * toast 工具桶文件
+ */
+export { getPlatform, isSelfDrawPlatform } from './platform'
+export { normalize } from './normalize'

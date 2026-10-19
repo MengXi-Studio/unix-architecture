@@ -1,0 +1,27 @@
+/**
+ * toast 类型转发层
+ *
+ * v0.8 起类型的唯一定义源是 utssdk/interface.uts（官方「声明与实现」
+ * 分层架构：interface.uts 同时承担 HBuilderX 语法提示、V1 代理参数
+ * 编码与入口函数类型别名的职责）。本文件仅做转发，保证实现层
+ * （normalize / channels 等）继续从 '../types' 引用的路径不变。
+ *
+ * 注意：跨层 re-export 的类型与 interface.uts 的声明是同一符号，
+ * 满足 UTS 名义类型系统（无双重定义漂移问题）。
+ */
+export type {
+	ToastIcon,
+	ToastPosition,
+	ToastErrorCode,
+	ToastResult,
+	ToastFail,
+	ToastOptions,
+	NormalizedOptions,
+	NormalizeResult,
+	ToastDefaults,
+	ShowToast,
+	HideToast,
+	ShowToastAsync,
+	ConfigureToast,
+	ShowToastQuick
+} from '../../interface.uts'

@@ -1,0 +1,11 @@
+/**
+ * modal 类型桶文件
+ */
+export type {
+	ModalOptions,
+	ModalResult,
+	ModalFail,
+	NormalizedModalOptions,
+	NormalizeModalResult,
+	ModalDefaults
+} from './modal'

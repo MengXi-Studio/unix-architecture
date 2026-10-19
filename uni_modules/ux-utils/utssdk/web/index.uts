@@ -1,0 +1,130 @@
+/**
+ * unix-utils 插件 Web 平台入口（官方架构：本文件即平台实现入口）
+ *
+ * 所有对外 API 以官方模板形态声明：`export const apiName: ApiType =
+ * function (...) {}`，函数体委托共享逻辑模块（../toast/*）；Web 端
+ * DOM 自绘通道见 channels/web.uts。
+ *
+ * 两条实测红线（v0.8）：
+ * 1. 不得使用 `export function apiName()` 声明——会触发 native 编译器
+ *    对全部导出符号做重载式重整（代理导出名变成 showToast__1），业务侧
+ *    import 报 "xxx is not exported by ?uts-proxy"；
+ * 2. 不得用 `export { x } from` 转发链对外暴露 API——uts-proxy V1
+ *    代理生成器只解析平台入口文件的内联声明，转发链对其不可见（iOS 编译
+ *    报同上错误）。
+ *
+ * 常量说明：以下常量须与 ../toast/constants/defaults.uts、
+ * ../toast/enums/toast-error-code.uts 保持一致（代理层仅识别内联字面量）。
+ */
+import { showToastImpl, hideToastImpl, showToastAsyncImpl } from '../toast/show-toast'
+import { showToastSuccessImpl, showToastErrorImpl, showToastInfoImpl } from '../toast/shortcut'
+import { configureToastImpl } from '../toast/config'
+import { showModalImpl, showModalAsyncImpl } from '../modal/show-modal'
+import { showModalAlertImpl } from '../modal/shortcut'
+import { configureModalImpl } from '../modal/config'
+import type {
+	ToastOptions,
+	ToastDefaults,
+	ToastIcon,
+	ToastErrorCode,
+	ShowToast,
+	HideToast,
+	ShowToastAsync,
+	ConfigureToast,
+	ShowToastQuick,
+	ModalOptions,
+	ModalResult,
+	ModalDefaults,
+	ShowModal,
+	ShowModalAsync,
+	ShowModalAlert,
+	ConfigureModal
+} from '../interface.uts'
+
+/* 对外类型导出（业务侧 then / catch 回调标注与字段访问所需） */
+export type { ModalFail, ModalResult } from '../interface.uts'
+
+/* 默认值常量 */
+/** 默认展示时长（毫秒） */
+export const DEFAULT_DURATION: number = 1500
+/** 默认图标 */
+export const DEFAULT_ICON: ToastIcon = 'success'
+/** 默认是否显示透明蒙层 */
+export const DEFAULT_MASK: boolean = false
+
+/* 错误码常量 */
+/** 参数非法（如 image 传 gif 于原生通道 App 端） */
+export const TOAST_ERR_PARAM_INVALID: ToastErrorCode = 1001
+/** 参数当前端不支持且已降级（info 级，不阻断展示） */
+export const TOAST_ERR_PLATFORM_UNSUPPORTED: ToastErrorCode = 2001
+
+/* API（官方模式：const + 函数类型别名 + function 表达式） */
+/** 展示 toast（回调式，与 uni.showToast 同构，迁移零成本） */
+export const showToast: ShowToast = function (options: ToastOptions): void {
+	showToastImpl(options)
+}
+
+/** 隐藏 toast */
+export const hideToast: HideToast = function (): void {
+	hideToastImpl()
+}
+
+/** Promise 式展示 toast（成功 resolve，失败 reject ToastFail） */
+export const showToastAsync: ShowToastAsync = function (options: ToastOptions): Promise<void> {
+	return showToastAsyncImpl(options)
+}
+
+/** 全局默认配置（字段为 null 表示沿用库内置默认） */
+export const configureToast: ConfigureToast = function (defaults: ToastDefaults): void {
+	configureToastImpl(defaults)
+}
+
+/** 展示成功提示 */
+export const showToastSuccess: ShowToastQuick = function (title: string): void {
+	showToastSuccessImpl(title)
+}
+
+/** 展示错误提示 */
+export const showToastError: ShowToastQuick = function (title: string): void {
+	showToastErrorImpl(title)
+}
+
+/** 展示信息提示（无图标） */
+export const showToastInfo: ShowToastQuick = function (title: string): void {
+	showToastInfoImpl(title)
+}
+
+/* ============================================================
+ * modal（v0.2 起）
+ * ============================================================ */
+
+/* 默认值常量 */
+/** 默认确认按钮文案 */
+export const DEFAULT_CONFIRM_TEXT: string = '确定'
+/** 默认取消按钮文案 */
+export const DEFAULT_CANCEL_TEXT: string = '取消'
+/** 默认确认按钮颜色 */
+export const DEFAULT_CONFIRM_COLOR: string = '#007aff'
+/** 默认取消按钮颜色 */
+export const DEFAULT_CANCEL_COLOR: string = '#000000'
+
+/* API */
+/** 展示模态弹窗（回调式，与 uni.showModal 同构，迁移零成本） */
+export const showModal: ShowModal = function (options: ModalOptions): void {
+	showModalImpl(options)
+}
+
+/** Promise 式展示模态弹窗（成功 resolve ModalResult，点取消不算失败） */
+export const showModalAsync: ShowModalAsync = function (options: ModalOptions): Promise<ModalResult> {
+	return showModalAsyncImpl(options)
+}
+
+/** 展示单确定按钮弹窗（alert 语义） */
+export const showModalAlert: ShowModalAlert = function (title: string, content: string | null): void {
+	showModalAlertImpl(title, content)
+}
+
+/** modal 全局默认配置（字段为 null 表示沿用库内置默认 / 平台默认） */
+export const configureModal: ConfigureModal = function (defaults: ModalDefaults): void {
+	configureModalImpl(defaults)
+}

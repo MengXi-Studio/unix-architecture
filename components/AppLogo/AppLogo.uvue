@@ -1,0 +1,15 @@
+<template>
+  <image class="app-logo" src="/static/logo.png"></image>
+</template>
+
+<script setup lang="uts">
+// 应用 Logo（easycom 组件：components/AppLogo/AppLogo.uvue，页面无需 import 直接使用；
+// 组件内只管尺寸，页面间距经外层 view 控制，规避样式隔离对组件根节点的约束）
+</script>
+
+<style>
+.app-logo {
+  width: 100px;
+  height: 100px;
+}
+</style>

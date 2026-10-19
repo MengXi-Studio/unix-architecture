@@ -1,5 +1,8 @@
 <template>
 	<view class="page">
+		<view class="logo-box">
+			<AppLogo />
+		</view>
 		<text class="app-name">{{ appName }}</text>
 		<input class="input" type="text" v-model="username" placeholder="用户名" />
 		<input class="input" type="text" :password="true" v-model="password" placeholder="密码" />
@@ -13,6 +16,7 @@
 import { useRouter, useRoute } from '@/uni_modules/ux-router/utssdk/index.uts'
 import { useUserStore } from '@/stores/index.uts'
 import { settings } from '@/config/index.uts'
+import { useLoading } from '@/composables/useLoading.uts'
 
 defineUniPage({
 	name: 'login',
@@ -26,20 +30,18 @@ const appName = settings.appName
 
 const username = ref('admin')
 const password = ref('123456')
-const loading = ref(false)
+const { loading, run } = useLoading()
 
 const handleLogin = (): void => {
 	if (loading.value) {
 		return
 	}
-	loading.value = true
-	userStore.loginAction(username.value, password.value).then(() => {
+	run(() => userStore.loginAction(username.value, password.value)).then(() => {
 		// 守卫登记的 redirect 优先；无则回首页
 		const target = route.query.get('redirect') ?? '/pages/index/index'
 		router.relaunch(target)
 	}).catch((_e) => {
-		// 失败提示由网络层统一 toast，这里仅复位加载态
-		loading.value = false
+		// 失败提示由网络层统一 toast；加载态已由 useLoading 旁链复位
 	})
 }
 </script>
@@ -49,6 +51,11 @@ const handleLogin = (): void => {
 		flex: 1;
 		padding: 40px;
 		justify-content: center;
+	}
+
+	.logo-box {
+		align-items: center;
+		margin-bottom: 16px;
 	}
 
 	.app-name {

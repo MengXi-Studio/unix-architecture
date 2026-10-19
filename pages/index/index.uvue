@@ -1,6 +1,8 @@
 <template>
 	<view class="page">
-		<image class="logo" src="/static/logo.png"></image>
+		<view class="logo-box">
+			<AppLogo />
+		</view>
 		<text class="title">{{ title }}</text>
 		<text class="welcome" v-if="name.length > 0">欢迎，{{ name }}</text>
 		<button class="logout-btn" @click="handleLogout">退出登录</button>
@@ -31,10 +33,10 @@ const handleLogout = (): void => {
 		flex: 1;
 	}
 
-	.logo {
-		height: 100px;
-		width: 100px;
-		margin: 100px auto 25px auto;
+	.logo-box {
+		align-items: center;
+		margin-top: 100px;
+		margin-bottom: 25px;
 	}
 
 	.title {

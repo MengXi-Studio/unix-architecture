@@ -1,0 +1,32 @@
+/**
+ * 通用异步加载态组合式函数（composables 域；对标 Vue3 生态 composables/useXxx 约定）
+ *
+ * 职责：包装异步任务，自动维护 loading 响应式状态。
+ * 错误语义原样透传：run 返回原始任务 Promise，业务结果与错误均由调用方
+ * .then / .catch 处理（错误提示由网络层统一 toast，此处不吞错误不复位逻辑）。
+ *
+ * 约束：UTS 类型属性方法不支持泛型（uts110111161），run 仅收 void 任务；
+ * 带返回值的异步任务需要加载态时，按同模式扩展 useTask<T>，勿在本函数上加泛型。
+ *
+ * 域约定：composable 函数无聚合出口，页面按需从 '@/composables/<name>.uts' 直接导入；
+ * 类型统一收拢 composables/types/，经 types.uts 聚合出口消费（与 api/stores 域模式统一）。
+ */
+import type { LoadingState } from './types.uts'
+
+export function useLoading(): LoadingState {
+  const loading = ref(false)
+
+  const run = (task: () => Promise<void>): Promise<void> => {
+    loading.value = true
+    const p = task()
+    // 旁链仅负责状态复位；原 Promise 原样返回，错误交由调用方处理
+    p.then((): void => {
+      loading.value = false
+    }).catch((_e): void => {
+      loading.value = false
+    })
+    return p
+  }
+
+  return { loading, run } as LoadingState
+}

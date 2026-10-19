@@ -1,0 +1,14 @@
+/**
+ * 加载态组合式函数类型定义（composables/types/ 目录，composables 域类型唯一事实源）
+ *
+ * 与 api/types/、stores/types/ 同构：域内类型集中定义，经 composables/types.uts
+ * 聚合出口消费；新增 composable 的 State 类型在此追加文件并在出口补转发。
+ */
+import type { Ref } from 'vue'
+
+export type LoadingState = {
+  /** 是否加载中 */
+  loading: Ref<boolean>
+  /** 执行异步任务：执行期间 loading 为 true，结束（含失败）自动复位 */
+  run: (task: () => Promise<void>) => Promise<void>
+}

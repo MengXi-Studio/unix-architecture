@@ -1,0 +1,7 @@
+/**
+ * composables 域类型聚合出口：消费方统一从本文件导入类型，新增领域类型文件在此追加转发。
+ * 采用具名类型转发（export type）——与 uni_modules 库入口已验证的跨端模式一致，
+ * 规避 Kotlin 端对纯类型 star re-export 的未实证风险。
+ * 注意：仅类型走本出口，composable 函数仍从各文件直接导入。
+ */
+export type { LoadingState } from './types/useLoading.uts'

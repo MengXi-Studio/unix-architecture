@@ -3,6 +3,9 @@
  *
  * 全局唯一配置源：utils/request.uts 等消费方从这里读取，不各自散落常量。
  * 多环境扩展点：可经 process.env.NODE_ENV / 条件编译区分 dev / prod 的 baseURL。
+ * 类型归属：AppSettings 为单文件模块私有契约，就近定义、不建 types/ 结构
+ * （与 api/stores 的区别：无跨文件消费方、聚合出口无聚合对象）；
+ * 待 config 拆分多文件（如 env / theme）时再一次性引入 config/types/ 结构。
  */
 
 /** 应用配置结构 */

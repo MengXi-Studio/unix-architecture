@@ -8,16 +8,16 @@
  */
 import type { Ref } from 'vue'
 import { defineStore } from '@/uni_modules/ux-pinia'
-import { login, getInfo, logout } from '@/servers/api/user.uts'
+import { login, getInfo, logout } from '@/api/user.uts'
 import { setToken as persistToken, removeToken as clearPersistedToken } from '@/utils/auth.uts'
 
 export type UserStore = {
-	token: Ref<string>,
-	name: Ref<string>,
-	avatar: Ref<string>,
-	loginAction: (username: string, password: string) => Promise<void>,
-	getInfoAction: () => Promise<void>,
-	logoutAction: () => Promise<void>,
+	token: Ref<string>
+	name: Ref<string>
+	avatar: Ref<string>
+	loginAction: (username: string, password: string) => Promise<void>
+	getInfoAction: () => Promise<void>
+	logoutAction: () => Promise<void>
 	resetToken: () => void
 }
 

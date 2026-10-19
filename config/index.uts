@@ -1,0 +1,22 @@
+/**
+ * 全局配置（config 层；对标社区流行脚手架的配置源约定）
+ *
+ * 全局唯一配置源：utils/request.uts 等消费方从这里读取，不各自散落常量。
+ * 多环境扩展点：可经 process.env.NODE_ENV / 条件编译区分 dev / prod 的 baseURL。
+ */
+
+/** 应用配置结构 */
+export type AppSettings = {
+	/** 应用名（登录页标题等） */
+	appName: string
+	/** 后端服务地址（当前指向本地 mock，接真实后端时替换） */
+	baseURL: string
+	/** 请求超时（毫秒） */
+	timeout: number
+}
+
+export const settings: AppSettings = {
+	appName: 'unix-architecture',
+	baseURL: 'http://127.0.0.1:3210',
+	timeout: 15000
+}

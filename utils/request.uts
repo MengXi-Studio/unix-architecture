@@ -1,14 +1,14 @@
 /**
- * servers 层 HTTP 核心封装（基于 mx-request；对标 vue-admin-template src/utils/request.js）
+ * 网络请求封装（utils 层；对标社区流行脚手架 utils/request.ts）
  *
  * 职责：全局默认配置、鉴权令牌注入、统一错误提示。
- * - 配置来源 settings.uts（全局唯一配置源，对标 process.env / config 注入）
- * - token 读写交给 utils/auth.uts（对标 utils/auth.js 与 request.js 的关系）
- * - 业务 API 一律落在 servers/api/<domain>.uts（对标 src/api/*.js），页面不直连网络层
+ * - 配置来源 config/index.uts（全局唯一配置源）
+ * - token 读写交给 utils/auth.uts
+ * - 调用链：页面 → store action → api/<domain> → request → mx-request，页面不直连网络层
  */
 import { configureRequest, useRequestInterceptor, useResponseInterceptor } from '@/uni_modules/mx-request'
 import type { RequestConfig, RequestError } from '@/uni_modules/mx-request'
-import { settings } from '@/utils/settings.uts'
+import { settings } from '@/config/index.uts'
 import { getToken } from '@/utils/auth.uts'
 
 /** 是否已完成初始化（防止拦截器重复注册导致双重提示） */
@@ -29,10 +29,10 @@ function friendlyMessage(err: RequestError): string {
 }
 
 /**
- * 初始化网络层（main.uts createApp 内经 setupServers 调用一次）
+ * 初始化网络层（main.uts createApp 内调用一次）
  * 幂等：重复调用直接跳过
  */
-export function initHttp(): void {
+export function initRequest(): void {
 	if (initialized) {
 		return
 	}
@@ -50,7 +50,7 @@ export function initHttp(): void {
 	useRequestInterceptor((config: RequestConfig): RequestConfig => {
 		const token = getToken()
 		if (token != null && token!.length > 0) {
-			let header = { } as UTSJSONObject
+			let header = {} as UTSJSONObject
 			if (config.header != null) {
 				header = config.header!
 			}
@@ -69,7 +69,7 @@ export function initHttp(): void {
 				icon: 'none'
 			})
 		}
-		console.error('[servers] 请求失败：' + err.code + ' ' + err.errMsg)
+		console.error('[request] 请求失败：' + err.code + ' ' + err.errMsg)
 		return null
 	})
 }

@@ -1,5 +1,5 @@
 /**
- * 用户域接口模块（对标 vue-admin-template src/api/user.js）
+ * 用户域接口模块（api 层，按领域拆分；对标社区流行脚手架 src/api/*.ts）
  *
  * 薄封装原则：仅做请求转发与路径收敛，不写业务逻辑；
  * 响应统一以 UTSJSONObject 承载，字段协议由业务后端约定

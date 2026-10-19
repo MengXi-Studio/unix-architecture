@@ -23,16 +23,18 @@ export function ensureAuthReady(): Promise<boolean> {
 	if (readyPromise != null) {
 		return readyPromise!
 	}
-	readyPromise = get(TOKEN_KEY).then((raw): boolean => {
-		if (raw != null) {
-			cachedToken = raw as string
-			return true
-		}
-		return false
-	}).catch((err): boolean => {
-		console.error('[auth] token 恢复失败：' + `${err}`)
-		return false
-	})
+	readyPromise = get(TOKEN_KEY)
+		.then((raw): boolean => {
+			if (raw != null) {
+				cachedToken = raw as string
+				return true
+			}
+			return false
+		})
+		.catch((err): boolean => {
+			console.error('[auth] token 恢复失败：' + `${err}`)
+			return false
+		})
 	return readyPromise!
 }
 
@@ -44,7 +46,7 @@ export function getToken(): string | null {
 /** 写 token（内存即时生效，持久层异步落盘） */
 export function setToken(token: string): void {
 	cachedToken = token
-	set(TOKEN_KEY, token, null).catch((err) => {
+	set(TOKEN_KEY, token, null).catch(err => {
 		console.error('[auth] token 持久化失败：' + `${err}`)
 	})
 }
@@ -52,7 +54,7 @@ export function setToken(token: string): void {
 /** 清除 token */
 export function removeToken(): void {
 	cachedToken = null
-	remove(TOKEN_KEY).catch((err) => {
+	remove(TOKEN_KEY).catch(err => {
 		console.error('[auth] token 清理失败：' + `${err}`)
 	})
 }

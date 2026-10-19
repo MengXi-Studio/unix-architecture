@@ -2,7 +2,7 @@ import { createSSRApp } from 'vue'
 import App from './App.uvue'
 import router from './router/index.uts'
 import { setupServers } from './servers/index.uts'
-import { setupPermission } from './permission.uts'
+import { setupPermission } from './router/permission.uts'
 
 export function createApp() {
 	const app = createSSRApp(App)

@@ -8,7 +8,7 @@
  */
 import { configureRequest, useRequestInterceptor, useResponseInterceptor } from '@/uni_modules/mx-request'
 import type { RequestConfig, RequestError } from '@/uni_modules/mx-request'
-import { settings } from '@/settings.uts'
+import { settings } from '@/utils/settings.uts'
 import { getToken } from '@/utils/auth.uts'
 
 /** 是否已完成初始化（防止拦截器重复注册导致双重提示） */

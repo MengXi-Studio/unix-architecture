@@ -12,7 +12,7 @@
 <script setup lang="uts">
 import { useRouter, useRoute } from '@/uni_modules/ux-router/utssdk/index.uts'
 import { useUserStore } from '@/stores/index.uts'
-import { settings } from '@/settings.uts'
+import { settings } from '@/utils/settings.uts'
 
 defineUniPage({
 	name: 'login',

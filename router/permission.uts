@@ -7,7 +7,7 @@
  * 技术差异：SPA 无冷启动问题，uni-app x 冷启动（H5 直达 / deeplink）时页面
  * 已加载而守卫未执行，需 guardRoute() 补跑守卫链（redirect 按 relaunch 执行）。
  */
-import router from './router/index.uts'
+import router from './index.uts'
 import type { RouteLocation, RawLocation, NavigationRedirect } from '@/uni_modules/ux-router/utssdk/index.uts'
 import { ensureAuthReady, getToken } from '@/utils/auth.uts'
 import { useUserStore } from '@/stores/index.uts'

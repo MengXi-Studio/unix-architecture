@@ -15,6 +15,11 @@ import { storeToRefs } from '@/uni_modules/ux-pinia'
 import { useUserStore } from '@/stores/index.uts'
 import { showModalAsync } from '@/uni_modules/ux-utils'
 
+defineUniPage({
+  name: 'index',
+  title: '首页'
+})
+
 const userStore = useUserStore()
 const { name } = storeToRefs(userStore)
 const router = useRouter()

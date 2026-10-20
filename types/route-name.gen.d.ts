@@ -6,7 +6,7 @@ import '@/uni_modules/ux-router/utssdk/index.uts'
 
 declare module '@/uni_modules/ux-router/utssdk/index.uts' {
 	interface RouteNameMap {
-		/** pages/index/index */
+		/** 首页 */
 		index: 'pages/index/index'
 		/** 登录 */
 		login: 'pages/login/login'

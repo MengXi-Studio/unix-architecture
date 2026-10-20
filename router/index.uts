@@ -1,9 +1,12 @@
-import { createRouter } from '@/uni_modules/ux-router/utssdk/index.uts'
+import { createRouter, InterceptorPlugin } from '@/uni_modules/ux-router/utssdk/index.uts'
 import { routes } from './routes.gen.uts'
 
 const router = createRouter({
-  routes,
-  strict: true
+	routes,
+	strict: true,
+	// 纵深防御：拦截外部直调的 uni.navigateTo 等原生导航，转交路由器执行守卫链
+	plugins: [new InterceptorPlugin()],
+	interceptUniApi: true
 })
 
 export default router

@@ -26,6 +26,3 @@ dist
 *.njsproj
 *.sln
 *.sw?
-
-# Trae 缓存
-.trae/

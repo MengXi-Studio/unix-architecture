@@ -9,6 +9,7 @@ export const routes: RouteConfig[] = [
 	{
 		path: 'pages/index/index',
 		name: 'index',
+		meta: { title: '首页' },
 	},
 	{
 		path: 'pages/login/login',

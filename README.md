@@ -1,26 +1,27 @@
 # unix-architecture
 
-> uni-app x 工程架构模板，以 vue-admin-template 的分层思想为蓝本，底层由梦曦工作室自研插件系（unix-* / mx-*）承载。
+> uni-app x 工程架构模板，api / stores / router / utils / pages 全分层落地，底层由梦曦工作室自研插件系（unix-* / mx-*）承载。
 > 技术栈：uni-app x（HBuilderX 5.26，VDOM 模式，vapor: true）· UTS 语言 · Vue3 组合式 API。
 
 ## 1. 项目定位
 
-uni-app x 的页面是编译期静态模型（多端编译到 JS / Kotlin / Swift），无法照搬标准 Vue3 的「单路由表、单插件协议」形态。本项目验证的目标是：**在 uni-app x 的底座约束下，最大程度还原 vue-admin-template 式的工程分层**——api / store / router / utils / views 各司其职、类型契约清晰、装配点唯一。
+uni-app x 的页面是编译期静态模型（多端编译到 JS / Kotlin / Swift），无法直接套用标准 Vue3 的「单路由表、单插件协议」形态。本项目验证的目标是：**在 uni-app x 的底座约束下，构建一套完整自洽的工程化分层**——api / store / router / utils / pages 各司其职、类型契约清晰、装配点唯一。
 
-技术栈映射关系（学习架构而非搬代码）：
+分层与插件承载关系（各层职责单一、依赖单向）：
 
-| vue-admin-template | 本项目 | 承载插件 |
+| 分层 | 位置 | 承载插件 |
 | --- | --- | --- |
-| `utils/request.js`（axios） | `utils/request.uts` | mx-request |
-| `api/*.js` 领域接口 | `api/*.uts` | mx-request |
-| `utils/auth.js`（js-cookie） | `utils/auth.uts` | ux-storage |
-| `store/modules/*.js`（vuex） | `stores/modules/*.uts` | ux-pinia |
-| `router/index.js`（vue-router） | `router/index.uts` | ux-router |
-| `permission.js` 全局守卫 | `router/permission.uts` | ux-router guard |
-| `settings.js` | `config/index.uts` | — |
-| `views/` | `pages/` | uni-app x 约定 |
-| `layout/` | （无对应，uni-app x 无全局布局机制） | — |
-| `store/getters.js` | （无对应，setup 式 store 中 computed 即 getter） | — |
+| 网络层（全局配置 + 双拦截器） | `utils/request.uts` | mx-request |
+| 接口层（领域函数 + DTO 还原） | `api/*.uts` | mx-request |
+| 凭证读写（token 同步读体验） | `utils/auth.uts` | ux-storage |
+| 状态层（业务状态与动作） | `stores/modules/*.uts` | ux-pinia |
+| 路由层（命名路由 + 守卫链） | `router/index.uts` | ux-router |
+| 全局守卫（鉴权重定向） | `router/permission.uts` | ux-router guard |
+| 配置层（全局唯一配置源） | `config/index.uts` | — |
+| 视图层（静态注册页面） | `pages/` | uni-app x 约定 |
+
+- uni-app x 无全局 layout 机制，页面结构由各页面自持。
+- setup 式 store 中 `computed` 即 getter，无独立 getters 层。
 
 ## 2. 目录结构
 
@@ -97,7 +98,7 @@ setupPermission()    // 注册 beforeEach + 冷启动 guardRoute() 补跑守卫�
 
 三种装配范式并存是 uni-app x 的底座约束：ux-router 实现 Vue install 协议；ux-pinia 免挂载（原生端 `app.use` 不可靠，P8 实测）；mx-request 为纯函数库（全局默认实例）。
 
-### 鉴权守卫（router/permission.uts，对标 permission.js）
+### 鉴权守卫（router/permission.uts）
 
 ```
 await ensureAuthReady()           // 异步守卫（ux-router 守卫链支持 await Promise）

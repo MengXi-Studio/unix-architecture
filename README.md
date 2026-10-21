@@ -69,6 +69,7 @@ uni-app x 的页面是编译期静态模型（多端编译到 JS / Kotlin / Swif
 │   └── login/login.uvue
 │
 ├── types/                    # 插件生成的 d.ts（defineUniPage / RouteNameMap），业务类型不放这里
+├── .trae/                    # AI 辅助开发体系（rules / skills / documents / mcp.json，见第 9 节）
 ├── static/  uni_modules/  uni.scss
 ```
 
@@ -165,3 +166,19 @@ D:\HBuilderX\cli.exe logcat web --project <项目绝对路径> --mode lastBuild
 - 后端地址：`config/index.uts` → `settings.baseURL`（接真实后端替换一处即可）。
 - 本地联调可用任意 mock 服务（协议：`POST /user/login → {token}`，`GET /user/info → {name, avatar}`，`POST /user/logout`），注意 CORS（`Authorization` 头需放行）。
 - 页面路由由 vite 插件从 `pages/` 目录生成，新增页面 = 建文件 + `pages.json` 注册 + 页内 `defineUniPage({ name, title })`。
+
+## 9. AI 辅助开发体系（.trae/）
+
+本仓库将「AI 助手如何在此架构下工作」沉淀为可执行的规则与技能，与代码同库存放、随仓库演进。各部分职责如下：
+
+| 内容 | 路径 | 职责 |
+| --- | --- | --- |
+| 架构开发规则 | `.trae/rules/architecture.md` | 架构规范的**机器强制约束层**：分层调用链与禁令、插件清单（导入路径唯一事实源）、标准落码顺序、类型组织判据、UTS 红线、装配点唯一、验证 DoD；与本规则冲突的写法一律视为错误实现 |
+| AI 行为协议 | `.trae/rules/core-protocol.md` | 协作协议：辩证执行、HBuilderX CLI 禁止幻觉构造、三种工作模式（交互 / 无人值守 / 谋定而后动）、DoD 检查清单、经验教训记录 |
+| 文档驱动工作流 | `.trae/rules/workflow.md` | 功能实现的强制推进流程：建立任务文档 → 等待并读取回答 → 实现与验证 → 实施记录回填；疑问与方案全部落盘跨会话持久，对话只做通知与执行 |
+| 通用规范沉淀 | `.trae/rules/project_rules.md` | uni-app x / UTS / uvue / ucss 通用约束摘录（条件编译、名义类型系统、UTS 编译器限制明细、样式规则），供生成代码时对齐官方口径 |
+| 新功能开发技能 | `.trae/skills/arch-feature/SKILL.md` | 按固定流程落码：需求确认 → DTO 类型 → api 薄封装 → store 模块 → 页面/组件 → 装配点检查 → 验证闭环；全程强制遵循 rules 体系 |
+| 任务文档归档 | `.trae/documents/` | 按「需求类型 / 日期」两级目录归档任务文档（需求分析、伪代码设计、疑问清单、实施记录）；`implementation-log.md` 为全项目任务汇总索引 |
+| MCP 配置 | `.trae/mcp.json` | uni-app-x MCP 服务器（`@dcloudio/uni-app-x-mcp`），供 AI 查询项目插件与 API 平台兼容性 |
+
+> 约束关系：本文档承载「架构为什么这样设计」的原理层描述，`.trae/rules/architecture.md` 承载「AI 必须怎么写」的强制层约束——二者同源、同步演进，修改任一侧需检查另一侧是否需要联动。

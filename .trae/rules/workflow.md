@@ -54,4 +54,5 @@
   - 方案落地形态（与伪代码设计的差异说明）· 变更文件清单 · 验证方式与结果 · 遗留 TODO（含位置；无则写「无」）。
 - 同时向 `.trae/documents/implementation-log.md` 追加一行索引：日期 · 任务文档相对链接 · 一句话结果（保持全项目任务的汇总视图）。
 - 按 `CHANGELOG.md` 既有格式登记用户可见的变更。
+- 版本发布经集中式 CI 私有仓库 `MengXi-Studio/ci-core` 触发（repository_dispatch，自动解析本 CHANGELOG 最新 `## [x.y.z]` 版本节创建 Release），业务仓库保持零工作流文件；**禁止**在 CHANGELOG 使用 `[Unreleased]` 占位（会被解析为版本号）。
 - 回填完成才算任务闭环；「代码写完但未回填」视为未完成。

@@ -35,7 +35,7 @@ description: 按本项目既定架构标准流程开发新功能或新业务模�
 - 新页面：`pages/<name>/<name>.uvue`（组合式 API）+ `pages.json` 注册 + 页内 `defineUniPage({ name, title })`——**每个页面（新建与改造）都必须声明该宏**，缺声明即不符合路由规则（title 会由插件同步到 pages.json 与路由 meta）。路由表 `router/routes.gen.uts` 由 vite 插件生成，**禁止手改**；分包页面放 `pages-sub/`。
 - 页面跳转：一律 `useRouter()` 的 `push` / `replace` / `relaunch` / `back`，**禁止** `uni.navigateTo` 系（绕过守卫链）；参数用 query Map（读取配 `queryInt` / `queryBool`）。
 - 守卫语义：新页面默认要求登录（白名单制），免登录页面必须同时在 `router/permission.uts` 的 `whiteList` 登记。
-- 可复用 UI：`components/<Name>/<Name>.uvue`（easycom，页面免 import）；组件内只管自身样式，间距由页面外层 view 控制。
+- 可复用 UI：**优先复用 `uni_modules/m-ui-x` 现成组件**（easycom 零注册，标签即用；主题定制仅在根 `uni.scss` 定义 `$m-*` 变量，禁止 @import 其 vars.scss）；库内没有的自有组件才建 `components/<Name>/<Name>.uvue`（easycom，页面免 import）；组件内只管自身样式，间距由页面外层 view 控制。
 - 横切 UI 状态：抽 `composables/useXxx.uts`，State 类型进 `composables/types/` 并补聚合出口转发。
 - 交互反馈：toast/modal 一律 ux-utils（`showToast` / `showModalAsync`）；禁用 uni.showToast / uni.showModal。
 
@@ -65,3 +65,4 @@ description: 按本项目既定架构标准流程开发新功能或新业务模�
 - 手改 `routes.gen.uts`、在模块顶层写 configureRequest 等副作用
 - UTS 写法踩线：undefined、truthy 判断、interface 对象字面量、enum 跨端传值、throw 非 Error
 - 凭记忆写插件导入路径（一律以 `.trae/rules/architecture.md` 第 1.1 节插件清单为准）
+- 自绘 m-ui-x 已有的组件（动手前先查插件清单组件列表）、在 uni.scss `@import` m-ui-x 的 vars.scss（sass 循环导入）

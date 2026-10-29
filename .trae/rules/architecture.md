@@ -23,8 +23,9 @@
 | mx-request | 网络请求 | `@/uni_modules/mx-request` | `request` / `configureRequest` / `useRequestInterceptor` / `useResponseInterceptor` |
 | ux-storage | 持久化（异步） | `@/uni_modules/ux-storage` | `set` / `get` / `remove` / `createStorage` |
 | ux-utils | toast / modal（全端自绘） | `@/uni_modules/ux-utils` | `showToast` / `showToastAsync` / `showModalAsync` / `showModalAlert` |
+| m-ui-x | UI 组件库（11 个基础组件） | **无需导入**（easycom，`<m-button>` 等标签即用） | `m-button` / `m-cell` / `m-cell-group` / `m-row` / `m-col` / `m-icon` / `m-image` / `m-text` / `m-space` / `m-loading` / `m-badge` |
 
-> 目录名与 npm 包名不同（如 `ux-utils` ↔ `@meng-xi/unix-utils`），一律以上表路径为准。
+> 目录名与 npm 包名不同（如 `ux-utils` ↔ `@meng-xi/unix-utils`、`m-ui-x` ↔ `@meng-xi/unix-ui`），一律以上表路径为准。
 
 ## 2. 新增业务功能的标准落码顺序
 
@@ -69,6 +70,7 @@
 - 持久化：token 一律经 `utils/auth.uts`；其它业务数据直接用 ux-storage 顶层 `set` / `get` / `remove`（key 加业务前缀，如 `order:draft`）；**禁用** `uni.setStorageSync` 系。
 - toast / modal 一律用 ux-utils：`showToast` / `showToastAsync` / `showModalAsync` / `showModalAlert`；**禁用** `uni.showToast` / `uni.showModal`。
 - 组件走 easycom 约定：`components/<Name>/<Name>.uvue`，页面免 import 直接使用；组件内只管自身样式，页面间距经外层 view 控制（规避样式隔离）。
+- 第三方 UI 一律用 `uni_modules/m-ui-x`：easycom 零注册，**新增 UI 优先复用其现成组件**，不自绘重复轮子；主题定制只在根 `uni.scss` 直接定义 `$m-*` 变量（编译期覆盖），**禁止** `@import` 其 `theme/vars.scss`——uni.scss 会注入全组件样式，与组件内引用同一文件触发 sass 循环导入。
 - 样式：仅 class 选择器 + flex 布局；文字样式只设在 text/button 上；不用 scoped、不用 rpx（除非随屏宽变化场景）。
 - 组合式函数放 `composables/`（`useXxx.uts` 命名），函数直接导入；State 类型进 `composables/types/`。
 

@@ -1,0 +1,225 @@
+<template>
+	<!-- 原生 image 增强封装：mode 等原生能力直通透传；扩展加载/失败占位（兄弟覆盖层）、淡入过渡、圆角圆形 -->
+	<view :class="rootClass" :style="rootStyle" @click="onClick">
+		<image
+			class="m-image__img"
+			:class="imgClass"
+			:style="imgStyle"
+			:src="src"
+			:mode="mode"
+			:lazy-load="lazyLoad"
+			@load="onLoad"
+			@error="onError"
+		/>
+		<!-- 占位覆盖层：原生 image 不可嵌套组件，加载中 / 失败占位以兄弟节点覆盖式呈现 -->
+		<view
+			class="m-image__mask"
+			v-if="(status == 'loading' && showLoading) || (status == 'error' && showError)"
+		>
+			<slot v-if="status == 'loading'" name="loading">
+				<m-icon :name="loadingIcon" :size="iconSize" custom-class="m-image__icon-text" />
+			</slot>
+			<slot v-else name="error">
+				<m-icon :name="errorIcon" :size="iconSize" custom-class="m-image__icon-text" />
+			</slot>
+		</view>
+		<!-- 默认插槽：渲染为 image 之后兄弟节点，由使用者自行定位样式 -->
+		<slot></slot>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { IconName } from '../m-icon/icons.uts'
+
+	/**
+	 * 图片裁剪缩放模式：与原生 image mode 属性同名词表，直通透传不做映射
+	 */
+	type ImageMode = 'scaleToFill' | 'aspectFit' | 'aspectFill' | 'widthFix' | 'heightFix' | 'top' | 'bottom' | 'center' | 'left' | 'right' | 'top left' | 'top right' | 'bottom left' | 'bottom right'
+
+	/**
+	 * 加载状态机：loading（初始 / 换图重置）→ success（@load）| error（@error）
+	 */
+	type ImageStatus = 'loading' | 'success' | 'error'
+
+	type Props = {
+		/** 图片资源地址（/static、file://、http(s) 网络路径） */
+		src: string
+		/** 图片裁剪缩放模式：与原生 image mode 同名直通，默认 aspectFill（裁剪填满、比例不变形） */
+		mode?: ImageMode
+		/** 图片懒加载：透传原生 lazy-load 属性（限 page 与 scroll-view 下生效，安卓默认懒加载不支持修改） */
+		lazyLoad?: boolean
+		/** 加载完成后是否淡入显示（opacity 0→1 过渡） */
+		fade?: boolean
+		/** 图片宽度：number 自动补 px，string 原样（支持 % / vw 等单位）；未传默认 100% */
+		width?: string | number | null
+		/** 图片高度：number 自动补 px，string 原样；未传默认 240px */
+		height?: string | number | null
+		/** 圆角值：number 自动补 px，string 原样 */
+		radius?: string | number | null
+		/** 是否圆形（border-radius 50%，优先于 radius） */
+		round?: boolean
+		/** 是否显示加载中占位（默认图标或 loading 插槽） */
+		showLoading?: boolean
+		/** 是否显示加载失败占位（默认图标或 error 插槽） */
+		showError?: boolean
+		/** 加载中占位图标名（m-icon 图标集） */
+		loadingIcon?: IconName
+		/** 加载失败占位图标名（m-icon 图标集） */
+		errorIcon?: IconName
+		/** 占位图标大小：纯数字自动补 px */
+		iconSize?: string
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		mode: 'aspectFill',
+		lazyLoad: false,
+		fade: true,
+		width: null,
+		height: null,
+		radius: null,
+		round: false,
+		showLoading: true,
+		showError: true,
+		loadingIcon: 'photo',
+		errorIcon: 'photo-fail',
+		iconSize: '32',
+		customClass: '',
+		customStyle: ''
+	})
+
+	const emit = defineEmits<{ click: [event: MouseEvent], load: [event: UniImageLoadEvent], error: [event: UniImageErrorEvent] }>()
+
+	/** 加载状态机当前状态 */
+	const status = ref<ImageStatus>('loading')
+
+	/** 根节点类名：基础类 + 自定义类名拼接 */
+	const rootClass = computed<string>(() => {
+		let cls = 'm-image'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** image 层类名：fade 开启时挂 opacity 过渡类（ucss transition 实现，跨端一致无关键帧兼容问题） */
+	const imgClass = computed<string>(() => {
+		return props.fade ? 'm-image__img--fade' : ''
+	})
+
+	/** image 层动态样式：fade 开启且未加载成功时隐藏（防加载完成瞬间首帧闪现），成功后移除触发 0→1 过渡 */
+	const imgStyle = computed<string>(() => {
+		if (props.fade && status.value != 'success') return 'opacity: 0;'
+		return ''
+	})
+
+	/**
+	 * 尺寸值规范化：number 自动补 px 单位，string 原样返回（支持 % / vw 等单位）
+	 */
+	function sizeValue(value: string | number): string {
+		if (typeof value == 'number') return value.toString() + 'px'
+		return value
+	}
+
+	/** 根节点动态样式：尺寸 / 圆角 / 圆形按 props 拼接（inline 优先级高于根节点默认尺寸），customStyle 补分号后拼接 */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		const w = props.width
+		if (w != null) style += ' width: ' + sizeValue(w) + ';'
+		const h = props.height
+		if (h != null) style += ' height: ' + sizeValue(h) + ';'
+		if (props.round) {
+			style += ' border-radius: 50%;'
+		} else {
+			const r = props.radius
+			if (r != null) style += ' border-radius: ' + sizeValue(r) + ';'
+		}
+		return style
+	})
+
+	/**
+	 * 点击事件透传：向父组件派发原生 click 事件
+	 */
+	function onClick(e: MouseEvent) {
+		emit('click', e)
+	}
+
+	/**
+	 * 加载成功：状态机进入 success（触发淡入），load 事件原样透传（detail 含图片宽高）
+	 */
+	function onLoad(e: UniImageLoadEvent) {
+		status.value = 'success'
+		emit('load', e)
+	}
+
+	/**
+	 * 加载失败：状态机进入 error（显示失败占位），error 事件原样透传（detail 含错误信息）
+	 */
+	function onError(e: UniImageErrorEvent) {
+		status.value = 'error'
+		emit('error', e)
+	}
+
+	// 换图重进加载态：src 变更后占位层重新显示，加载完成后再次淡入
+	watch(
+		() => props.src,
+		() => {
+			status.value = 'loading'
+		}
+	)
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss，
+	 * uni.scss 注入机制与组件内引入同一文件会触发循环导入）。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 根节点 ========== */
+	/* 相对定位承载占位覆盖层；overflow hidden 裁剪圆角内图片（uvue 默认 hidden 仍显式声明防回退）；
+	   默认尺寸 width 100% / height 240px（未传 width / height 时零配置可见，inline 传值即覆盖） */
+	.m-image {
+		position: relative;
+		overflow: hidden;
+		width: 100%;
+		height: 240px;
+	}
+
+	/* ========== 图片层 ========== */
+	/* 铺满根节点，圆角裁剪由根节点 overflow hidden 完成 */
+	.m-image__img {
+		width: 100%;
+		height: 100%;
+	}
+
+	/* 淡入过渡：opacity 变化 300ms ease-out */
+	.m-image__img--fade {
+		transition-property: opacity;
+		transition-duration: 300ms;
+		transition-timing-function: ease-out;
+	}
+
+	/* ========== 加载中 / 失败占位覆盖层 ========== */
+	/* absolute 四边归零覆盖图片层，flex 居中放置图标或插槽内容 */
+	.m-image__mask {
+		position: absolute;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		left: 0;
+		background-color: $m-image-background;
+		display: flex;
+		justify-content: center;
+		align-items: center;
+	}
+
+	/* 占位图标颜色类：经 custom-class 挂到 m-icon 根 text（m-icon color prop 是运行时字符串，无法接 SCSS 变量） */
+	.m-image__icon-text {
+		color: $m-image-icon-color;
+	}
+</style>

@@ -1,0 +1,152 @@
+<template>
+	<!-- 单 view 根节点：栅格列，宽度 / 偏移走档位类，gutter 间距走 inline style -->
+	<view :class="rootClass" :style="rootStyle" @click="handleClick">
+		<slot></slot>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { ROW_KEY, RowContext, generateColId } from '../m-row/context.uts'
+
+	type Props = {
+		/** 列元素宽度（24 栅格份数）；0 / 未设置时宽度由内容决定 */
+		span?: number | string
+		/** 左侧偏移份数（计算方式同 span） */
+		offset?: number | string | null
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		span: 0,
+		offset: null,
+		customClass: '',
+		customStyle: ''
+	})
+
+	const emit = defineEmits<{ click: [event: MouseEvent] }>()
+
+	/**
+	 * 数值归一：number 原样、string parseFloat、null / 非法回退 0
+	 */
+	function toNum(value: number | string | null): number {
+		if (value == null) return 0
+		if (typeof value == 'number') return value
+		const n = parseFloat(value)
+		return isNaN(n) ? 0 : n
+	}
+
+	/**
+	 * 栅格份数是否为有效类名档位：1-24 的整数
+	 * （0 表示宽度由内容决定不拼类，小数无对应档位类同样不拼）
+	 */
+	function isSpanSlot(value: number): boolean {
+		if (value < 1 || value > 24) return false
+		return value == Math.floor(value)
+	}
+
+	/**
+	 * 行上下文：setup 同步注册自身 span（注册顺序即渲染顺序，首帧即为正确下标），
+	 * onUnmounted 注销；无 row 父级时独立使用，仅档位类生效、无 gutter 间距
+	 */
+	const rowContext = inject<RowContext | null>(ROW_KEY, null)
+	const colId = generateColId()
+	if (rowContext != null) {
+		rowContext.register(colId, toNum(props.span))
+	}
+	onUnmounted(() => {
+		if (rowContext != null) {
+			rowContext.unregister(colId)
+		}
+	})
+
+	// 动态 span：上报值随 prop 更新（间距重算依赖 row 侧 reactive 注册表）
+	watch(
+		() => props.span,
+		(v: number | string) => {
+			if (rowContext != null) {
+				rowContext.setSpan(colId, toNum(v))
+			}
+		},
+		{ flush: 'post' }
+	)
+
+	/**
+	 * 点击事件透传：向使用者派发原生 click 事件
+	 */
+	function handleClick(event: MouseEvent) {
+		emit('click', event)
+	}
+
+	/** 根节点类名：span / offset 档位类（0 与越界值不拼类）+ customClass */
+	const rootClass = computed<string>(() => {
+		let cls = 'm-col'
+		const spanNum = toNum(props.span)
+		if (isSpanSlot(spanNum)) cls += ' m-col--' + spanNum.toString()
+		const offsetNum = props.offset == null ? 0 : toNum(props.offset)
+		if (isSpanSlot(offsetNum)) cls += ' m-col--offset-' + offsetNum.toString()
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/**
+	 * 根节点内联样式：gutter 间距由 row 侧按 24 栅格平均分配算出，
+	 * col 以自身 id 查询当前下标消费 padding（水平）/ margin-bottom（垂直），0 值省略
+	 */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		if (rowContext == null) return style
+		const index = rowContext.indexOfCol(colId)
+		if (index == -1) return style
+		const spacesRef = rowContext.spaces
+		if (spacesRef != null) {
+			const arr = spacesRef.value
+			if (index < arr.length) {
+				const space = arr[index]
+				if (space.left > 0) style += 'padding-left: ' + space.left.toString() + 'px;'
+				if (space.right > 0) style += 'padding-right: ' + space.right.toString() + 'px;'
+			}
+		}
+		const verticalRef = rowContext.verticalSpaces
+		if (verticalRef != null) {
+			const arr = verticalRef.value
+			if (index < arr.length && arr[index] > 0) {
+				style += 'margin-bottom: ' + arr[index].toString() + 'px;'
+			}
+		}
+		return style
+	})
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明：Col 为纯布局组件，宽度 / 偏移由 span / offset 百分比决定，
+	 * 不绑定主题变量。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 基类（border-box 使 span 宽度含 gutter padding；min-height 防空列塌陷） ========== */
+	.m-col {
+		box-sizing: border-box;
+		min-height: 1px;
+	}
+
+	/*
+	 * ========== 24 档 span / offset 百分比矩阵 ==========
+	 * 变体矩阵膨胀，@for 生成；展开产物为扁平类（ucss 仅 class 选择器）。
+	 * 常数 4.16666666667 = 100/24（scss 乘法生成百分比，24 档合计误差在亚像素容差内）。
+	 * 仅设 width 定宽：App 端 max-width 不支持百分比（打包 ERROR 且样式被忽略），
+	 * 而 width 百分比已确定主轴尺寸，无可防御的超宽场景，不设 max-width。
+	 */
+	@for $i from 1 through 24 {
+		.m-col--#{$i} {
+			width: $i * 4.16666666667%;
+		}
+		.m-col--offset-#{$i} {
+			margin-left: $i * 4.16666666667%;
+		}
+	}
+</style>

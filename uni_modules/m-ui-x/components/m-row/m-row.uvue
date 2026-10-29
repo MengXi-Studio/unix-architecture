@@ -1,0 +1,215 @@
+<template>
+	<!-- 单 view 根节点：flex 换行容器，default 插槽直通，栅格间距经 context 下发由 col 消费 -->
+	<view :class="rootClass" :style="rootStyle" @click="handleClick">
+		<slot></slot>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { ROW_KEY, RowContext, ColReg, RowSpace } from './context.uts'
+
+	/**
+	 * 交叉轴对齐方式
+	 */
+	type RowAlign = 'top' | 'center' | 'bottom'
+
+	/**
+	 * 主轴对齐方式
+	 */
+	type RowJustify = 'start' | 'end' | 'center' | 'space-around' | 'space-between'
+
+	/**
+	 * 间距值项：number 直接取值、string 数值串 parseFloat
+	 */
+	type GutterValue = number | string
+
+	type Props = {
+		/** 列元素之间的间距（px）；数组 [水平, 垂直]；0 不产生间距 */
+		gutter?: GutterValue | GutterValue[] | null
+		/** 主轴对齐方式，等价 justify-content（start 为默认值） */
+		justify?: RowJustify | null
+		/** 交叉轴对齐方式，等价 align-items（top 为默认值） */
+		align?: RowAlign | null
+		/** 是否自动换行 */
+		wrap?: boolean
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		gutter: 0,
+		justify: null,
+		align: null,
+		wrap: true,
+		customClass: '',
+		customStyle: ''
+	})
+
+	const emit = defineEmits<{ click: [event: MouseEvent] }>()
+
+	/**
+	 * 数值归一：number 原样、string parseFloat、null / 非法回退 0
+	 */
+	function toNum(value: GutterValue | null): number {
+		if (value == null) return 0
+		if (typeof value == 'number') return value
+		const n = parseFloat(value)
+		return isNaN(n) ? 0 : n
+	}
+
+	/**
+	 * 栅格上下文：col 注册表 + 间距下发，
+	 * spaces / verticalSpaces 在下方 computed 求值后挂入，provide 给组内 col
+	 */
+	const ctx = new RowContext()
+
+	/** 水平间距（px）：gutter 数组取第一值，单值直取 */
+	const gutterHorizontal = computed<number>(() => {
+		const g = props.gutter
+		if (g == null) return 0
+		if (Array.isArray(g)) {
+			const arr = g as GutterValue[]
+			return toNum(arr.length > 0 ? arr[0] : null)
+		}
+		return toNum(g)
+	})
+
+	/** 垂直间距（px）：仅 gutter 数组第二值生效 */
+	const gutterVertical = computed<number>(() => {
+		const g = props.gutter
+		if (g == null || !Array.isArray(g)) return 0
+		const arr = g as GutterValue[]
+		return arr.length > 1 ? toNum(arr[1]) : 0
+	})
+
+	/**
+	 * 行分组：span 累加超 24 即分行（offset 不计入行判定）；
+	 * 换行本身由 flex-wrap 自然完成，分组仅用于间距的行级计算
+	 */
+	const groups = computed<number[][]>(() => {
+		const result: number[][] = [[]]
+		let totalSpan = 0
+		ctx.cols.forEach((col: ColReg, index: number) => {
+			totalSpan += col.span
+			if (totalSpan > 24) {
+				result.push([index])
+				totalSpan -= 24
+			} else {
+				result[result.length - 1].push(index)
+			}
+		})
+		return result
+	})
+
+	/**
+	 * 水平间距（平均分配）：行内 n 列时 avg = gutter×(n-1)/n，
+	 * 首列无左 padding、尾列无右 padding，相邻列间 padding 之和恰为 gutter
+	 */
+	const spaces = computed<RowSpace[]>(() => {
+		const result: RowSpace[] = []
+		const g = gutterHorizontal.value
+		if (g <= 0) return result
+		groups.value.forEach((group: number[]) => {
+			const avg = (g * (group.length - 1)) / group.length
+			group.forEach((item: number, index: number) => {
+				if (index == 0) {
+					result.push({ left: 0, right: avg } as RowSpace)
+				} else {
+					const left = g - result[item - 1].right
+					result.push({ left: left, right: avg - left } as RowSpace)
+				}
+			})
+		})
+		return result
+	})
+
+	/**
+	 * 垂直间距（px）：除最后一行外，每列 margin-bottom = gutter 数组第二值
+	 */
+	const verticalSpaces = computed<number[]>(() => {
+		const result: number[] = []
+		const bottom = gutterVertical.value
+		if (bottom <= 0) return result
+		groups.value.forEach((group: number[], groupIndex: number) => {
+			if (groupIndex == groups.value.length - 1) return
+			group.forEach((_item: number) => {
+				result.push(bottom)
+			})
+		})
+		return result
+	})
+
+	ctx.spaces = spaces
+	ctx.verticalSpaces = verticalSpaces
+	provide(ROW_KEY, ctx)
+
+	/**
+	 * 点击事件透传：向使用者派发原生 click 事件
+	 */
+	function handleClick(event: MouseEvent) {
+		emit('click', event)
+	}
+
+	/** 根节点类名：justify / align 变体（start / top 为默认值不拼类）+ nowrap 变体 + customClass */
+	const rootClass = computed<string>(() => {
+		let cls = 'm-row'
+		if (props.justify != null && props.justify != 'start') {
+			cls += ' m-row--justify-' + (props.justify as RowJustify)
+		}
+		if (props.align != null && props.align != 'top') {
+			cls += ' m-row--align-' + (props.align as RowAlign)
+		}
+		if (!props.wrap) cls += ' m-row--nowrap'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 根节点内联样式：customStyle 补分号 */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		return style
+	})
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明：Row 为纯布局组件，无默认视觉值，不绑定主题变量。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 基类（uvue view 默认 column，必须显式 row；默认自动换行） ========== */
+	.m-row {
+		flex-direction: row;
+		flex-wrap: wrap;
+	}
+
+	/* ========== 主轴对齐变体（start 为默认值无类） ========== */
+	.m-row--justify-center {
+		justify-content: center;
+	}
+	.m-row--justify-end {
+		justify-content: flex-end;
+	}
+	.m-row--justify-space-between {
+		justify-content: space-between;
+	}
+	.m-row--justify-space-around {
+		justify-content: space-around;
+	}
+
+	/* ========== 交叉轴对齐变体（top 为默认值无类） ========== */
+	.m-row--align-center {
+		align-items: center;
+	}
+	.m-row--align-bottom {
+		align-items: flex-end;
+	}
+
+	/* ========== 不换行变体 ========== */
+	.m-row--nowrap {
+		flex-wrap: nowrap;
+	}
+</style>

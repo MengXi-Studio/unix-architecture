@@ -1,0 +1,120 @@
+<template>
+	<view :class="groupClass" :style="rootStyle">
+		<!-- 分组标题：位于列表上方（插槽可替换默认文字） -->
+		<view v-if="props.title != ''" class="m-cell-group__title">
+			<slot name="title">
+				<text class="m-cell-group__title-text">{{ props.title }}</text>
+			</slot>
+		</view>
+		<!-- 组内容：m-cell 依次排列 -->
+		<slot></slot>
+		<!-- 外边框上下 0.5px 细线：inset 模式无外框 -->
+		<view v-if="showFrame" class="m-cell-group__line-top"></view>
+		<view v-if="showFrame" class="m-cell-group__line-bottom"></view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { CELL_GROUP_KEY, CellGroupContext } from './context.uts'
+
+	type Props = {
+		/** 分组标题 */
+		title?: string
+		/** 是否为圆角卡片分组（两侧留白，无外边框） */
+		inset?: boolean
+		/** 是否显示外边框（inset 模式下无外框） */
+		border?: boolean
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		title: '',
+		inset: false,
+		border: true,
+		customClass: '',
+		customStyle: ''
+	})
+
+	/**
+	 * 组上下文：provide 给组内 m-cell 注册
+	 * cell 据此感知自身是否组内末位，自动隐藏末线
+	 */
+	const context = new CellGroupContext()
+	provide(CELL_GROUP_KEY, context)
+
+	/** 根节点类名：BEM 变体类按 props 状态组合 */
+	const groupClass = computed<string>(() => {
+		let cls = 'm-cell-group'
+		if (props.inset) cls += ' m-cell-group--inset'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 根节点内联样式：customStyle 补分号 */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		return style
+	})
+
+	/** 外边框显隐：border 开启且非 inset 模式 */
+	const showFrame = computed<boolean>(() => {
+		return props.border && !props.inset
+	})
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），用户零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss，
+	 * uni.scss 注入机制与组件内引入同一文件会触发循环导入）。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 根节点 ========== */
+	.m-cell-group {
+		position: relative;
+		background-color: $m-cell-group-background;
+	}
+	.m-cell-group--inset {
+		margin: $m-cell-group-inset-padding;
+		border-radius: $m-cell-group-inset-radius;
+		overflow: hidden;
+	}
+
+	/* ========== 分组标题 ========== */
+	.m-cell-group__title {
+		padding: $m-cell-group-title-padding;
+	}
+	.m-cell-group__title-text {
+		font-size: $m-cell-group-title-font-size;
+		line-height: $m-cell-group-title-line-height;
+		color: $m-cell-group-title-color;
+	}
+
+	/* ========== 外边框上下 0.5px 细线（绝对定位单线，scaleY 减半） ========== */
+	.m-cell-group__line-top {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		height: 1px;
+		background-color: $m-cell-border-color;
+		transform: scaleY(0.5);
+		transform-origin: 0 0;
+	}
+	.m-cell-group__line-bottom {
+		position: absolute;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		height: 1px;
+		background-color: $m-cell-border-color;
+		transform: scaleY(0.5);
+		transform-origin: 0 100%;
+	}
+</style>

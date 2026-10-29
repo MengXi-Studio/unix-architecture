@@ -1,0 +1,312 @@
+<template>
+	<view :class="rootClass" :style="rootStyle">
+		<!-- 图标容器：仅承载尺寸与旋转动画；icon 插槽可替换默认图标，替换后旋转节奏不变 -->
+		<view ref="spinnerRef" class="m-loading__spinner" :style="spinnerStyle">
+			<slot name="icon">
+				<!-- circular：弧段圆环（顶部单色弧 + 透明轨道），随容器匀速旋转 -->
+				<view v-if="props.type == 'circular'" :class="ringClass" :style="ringStyle"></view>
+				<!-- spinner：12 条辐条亮度递减成拖尾，随容器 12 步离散旋转 -->
+				<view v-for="i in spokeCount" :key="i" :class="spokeClass" :style="spokeStyle(i)"></view>
+			</slot>
+		</view>
+		<!-- 加载文案：传入默认插槽内容时渲染，避免空文案节点产生多余间距 -->
+		<text v-if="hasText" :class="textClass" :style="textStyle"><slot></slot></text>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { LoadingType } from './loading.uts'
+
+	type Props = {
+		/** 加载类型 */
+		type?: LoadingType
+		/** 加载图标颜色：支持语义色名（default / primary / success / warning / danger / white）与 CSS 色值（#hex 等） */
+		color?: string
+		/** 加载图标大小，支持纯数字（自动补 px）、带单位字符串或 '100%'（撑满外部定尺寸容器） */
+		size?: string
+		/** 是否垂直排列图标与文字 */
+		vertical?: boolean
+		/** 加载文案字号，支持纯数字（自动补 px）或带单位字符串 */
+		textSize?: string
+		/** 加载文案颜色 */
+		textColor?: string
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		type: 'circular',
+		color: '',
+		size: '',
+		vertical: false,
+		textSize: '',
+		textColor: '',
+		customClass: '',
+		customStyle: ''
+	})
+
+	const slots = useSlots()
+
+	/** 图标容器元素引用（旋转动画作用目标） */
+	const spinnerRef = ref<UniElement | null>(null)
+
+	/** 当前旋转动画句柄（切换 type 时先取消旧动画再重启） */
+	let animation: Animation | null = null
+
+	/** spinner 型辐条数量：仅 spinner 型渲染 12 条，其余类型为 0（不产生节点） */
+	const spokeCount = computed<number>(() => props.type == 'spinner' ? 12 : 0)
+
+	/** 是否传入默认插槽内容（决定文案节点是否渲染） */
+	const hasText = computed<boolean>(() => slots.default != null)
+
+	/** 根节点类名：纵向排列与自定义类名按 props 拼接 */
+	const rootClass = computed<string>(() => {
+		let cls = 'm-loading'
+		if (props.vertical) cls += ' m-loading--vertical'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 根节点动态样式：customStyle 补分号后拼接；size 传 '100%' 时根节点同步撑满（配合外部定尺寸框复用） */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		if (props.size == '100%') style += 'width: 100%; height: 100%;'
+		return style
+	})
+
+	/** 语义色名单：命中走编译期变体类（绑定 $m-color-* 主题变量，覆盖仍生效），否则视为 CSS 色值走 inline */
+	const semanticColors: string[] = ['default', 'primary', 'success', 'warning', 'danger', 'white']
+
+	/** 语义色变体名：color 为语义色名时返回该名，否则空串 */
+	const colorVariant = computed<string>(() => {
+		return semanticColors.indexOf(props.color) >= 0 ? props.color : ''
+	})
+
+	/** 弧段圆环类名：语义色时追加变体类（主题色编译期绑定） */
+	const ringClass = computed<string>(() => {
+		let cls = 'm-loading__ring'
+		if (colorVariant.value != '') cls += ' m-loading__ring--' + colorVariant.value
+		return cls
+	})
+
+	/** 花瓣辐条类名：语义色时追加变体类（主题色编译期绑定） */
+	const spokeClass = computed<string>(() => {
+		let cls = 'm-loading__spoke'
+		if (colorVariant.value != '') cls += ' m-loading__spoke--' + colorVariant.value
+		return cls
+	})
+
+	/**
+	 * 数字或纯数字字符串补 px 单位（如 "24" → "24px"），带单位字符串原样返回
+	 */
+	function addUnit(value: string): string {
+		if (value == '') return ''
+		const pattern = new RegExp('^-?\\d+(\\.\\d+)?$')
+		return pattern.test(value) ? value + 'px' : value
+	}
+
+	/** 图标容器动态样式：size 非空时定宽高（纯数字自动补 px、'100%' 原样撑满），为空时走主题默认尺寸 */
+	const spinnerStyle = computed<string>(() => {
+		if (props.size == '') return ''
+		const side = addUnit(props.size)
+		return 'width: ' + side + '; height: ' + side + ';'
+	})
+
+	/** 弧段圆环动态样式：自定义 CSS 色值时弧段（顶部边框）使用自定义颜色（语义色走变体类） */
+	const ringStyle = computed<string>(() => {
+		if (props.color == '' || colorVariant.value != '') return ''
+		return 'border-top-color: ' + props.color + ';'
+	})
+
+	/**
+	 * spinner 型辐条动态样式：每 30° 一条绕圆心均匀分布，亮度按序号递减形成拖尾
+	 * （第 i 条 opacity = 1 - 0.0625 × (i - 1)，首条 1.0 递减至末条 0.3125）；自定义 CSS 色值时颜色走 inline（语义色走变体类）
+	 */
+	function spokeStyle(index: number): string {
+		let style = 'transform: rotate(' + ((index - 1) * 30) + 'deg);'
+		style += ' opacity: ' + (1 - 0.0625 * (index - 1)) + ';'
+		if (props.color != '' && colorVariant.value == '') style += ' background-color: ' + props.color + ';'
+		return style
+	}
+
+	/** 文案类名：纵向排列时间距从图标右侧换到上方 */
+	const textClass = computed<string>(() => {
+		let cls = 'm-loading__text'
+		if (props.vertical) cls += ' m-loading__text--vertical'
+		return cls
+	})
+
+	/** 文案动态样式：text-size / text-color 非空时 inline 覆盖（text-size 纯数字自动补 px） */
+	const textStyle = computed<string>(() => {
+		let style = ''
+		if (props.textSize != '') style += 'font-size: ' + addUnit(props.textSize) + ';'
+		if (props.textColor != '') style += ' color: ' + props.textColor + ';'
+		return style
+	})
+
+	/**
+	 * spinner 型阶梯关键帧：每 1/12 周期角位移 30°，段内恒值、段末约 2% 时长完成过渡
+	 * （UniAnimationOptionEasing 类型不支持 steps() 缓动，App 端原生不识别；
+	 * 用 linear easing + 双帧夹逼实现等效的 12 步离散旋转，跨端行为一致）
+	 */
+	function buildTickKeyframes(): UniAnimationKeyframe[] {
+		const frames: UniAnimationKeyframe[] = []
+		for (let i = 0; i < 12; i++) {
+			frames.push({ transform: 'rotate(' + (i * 30) + 'deg)', offset: i / 12 })
+			frames.push({ transform: 'rotate(' + (i * 30) + 'deg)', offset: (i + 0.98) / 12 })
+		}
+		frames.push({ transform: 'rotate(360deg)', offset: 1 })
+		return frames
+	}
+
+	/**
+	 * 启动旋转动画
+	 * spinner：1.2s 12 步阶梯离散旋转（滴答式拖尾）；circular：2s 匀速（弧段追逐感）
+	 * 通过 UniElement.animate 实现（ucss 禁用 @keyframes，动画一律走 animate API）
+	 */
+	function startAnimation() {
+		// 切换动画前先取消旧动画（如动态切换 type）
+		animation?.cancel()
+		if (spinnerRef.value == null) return
+		// spinner 型换 12 步阶梯关键帧，circular 型两帧匀速旋转
+		let keyframes: UniAnimationKeyframe[] = [
+			{ transform: 'rotate(0deg)', offset: 0 },
+			{ transform: 'rotate(360deg)', offset: 1 }
+		]
+		if (props.type == 'spinner') keyframes = buildTickKeyframes()
+		animation = spinnerRef.value.animate(
+			keyframes,
+			{ duration: props.type == 'spinner' ? 1200 : 2000, iterations: Infinity, easing: 'linear' }
+		)
+	}
+
+	// 组件挂载即进入常驻加载动画（加载组件本身就是加载状态的表达，无开关 prop）
+	onMounted(() => {
+		startAnimation()
+	})
+
+	// 动态切换加载类型时重启动画（flush: post 确保切换后的节点已渲染再取 ref）
+	watch(
+		() => props.type,
+		(_: LoadingType) => {
+			startAnimation()
+		},
+		{ flush: 'post' }
+	)
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss，
+	 * uni.scss 注入机制与组件内引入同一文件会触发循环导入）。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 根节点 ========== */
+	.m-loading {
+		flex-direction: row;
+		align-items: center;
+		/* 收缩宽度贴内容，避免块级默认撑满父容器 */
+		align-self: flex-start;
+	}
+	/* 纵向排列：图标在上文字在下，整体水平居中 */
+	.m-loading--vertical {
+		flex-direction: column;
+		align-items: center;
+	}
+
+	/* ========== 图标容器（尺寸与动画承载） ========== */
+	/* flex 居中：自定义插槽图标默认按起始对齐，偏离容器中心会使旋转呈公转轨迹，居中后视觉等效自转 */
+	.m-loading__spinner {
+		position: relative;
+		width: $m-loading-spinner-size;
+		height: $m-loading-spinner-size;
+		justify-content: center;
+		align-items: center;
+	}
+
+	/* ========== circular 弧段圆环 ========== */
+	/* 单色弧段 + 透明轨道：直径取容器 80%（inset 10%），2px 弧线宽 */
+	.m-loading__ring {
+		position: absolute;
+		top: 10%;
+		left: 10%;
+		width: 80%;
+		height: 80%;
+		border-width: 2px;
+		border-style: solid;
+		border-color: transparent;
+		border-top-color: $m-loading-spinner-color;
+		border-radius: $m-radius-max;
+	}
+
+	/* ========== spinner 花瓣辐条 ========== */
+	/* 2px 固定宽（不随图标尺寸缩放）、40% 百分比圆角，水平居中于圆心正上方，
+	   绕自身高度 200% 处（恰为容器中心）旋转分布；亮度拖尾 opacity 由运行时 inline style 按序号递减 */
+	.m-loading__spoke {
+		position: absolute;
+		top: 0;
+		left: 50%;
+		width: 2px;
+		height: 25%;
+		margin-left: -1px;
+		border-radius: 40%;
+		background-color: $m-loading-spinner-color;
+		transform-origin: 50% 200%;
+	}
+
+	/* ========== 语义色变体（color 传语义色名时启用，编译期绑定主题变量，用户覆盖 uni.scss 变量即生效） ========== */
+	.m-loading__ring--default {
+		border-top-color: $m-text-color;
+	}
+	.m-loading__ring--primary {
+		border-top-color: $m-color-primary;
+	}
+	.m-loading__ring--success {
+		border-top-color: $m-color-success;
+	}
+	.m-loading__ring--warning {
+		border-top-color: $m-color-warning;
+	}
+	.m-loading__ring--danger {
+		border-top-color: $m-color-danger;
+	}
+	.m-loading__ring--white {
+		border-top-color: $m-white;
+	}
+	.m-loading__spoke--default {
+		background-color: $m-text-color;
+	}
+	.m-loading__spoke--primary {
+		background-color: $m-color-primary;
+	}
+	.m-loading__spoke--success {
+		background-color: $m-color-success;
+	}
+	.m-loading__spoke--warning {
+		background-color: $m-color-warning;
+	}
+	.m-loading__spoke--danger {
+		background-color: $m-color-danger;
+	}
+	.m-loading__spoke--white {
+		background-color: $m-white;
+	}
+
+	/* ========== 文案 ========== */
+	.m-loading__text {
+		margin-left: $m-loading-text-gap;
+		color: $m-loading-text-color;
+		font-size: $m-loading-text-font-size;
+		line-height: 1.2;
+	}
+	.m-loading__text--vertical {
+		margin-left: 0;
+		margin-top: $m-loading-text-gap;
+	}
+</style>

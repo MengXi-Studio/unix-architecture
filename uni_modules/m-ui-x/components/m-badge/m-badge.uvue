@@ -1,0 +1,252 @@
+<template>
+	<!-- 徽标：包裹模式（有 default 子元素，徽标绝对定位于四角、中心压角）/ 独立模式（无子元素，行内展示） -->
+	<view v-if="hasDefaultSlot" :class="rootClass" :style="rootStyle">
+		<slot></slot>
+		<view v-if="visible" :class="markClass" :style="markStyle">
+			<template v-if="hasContentSlot">
+				<slot name="content"></slot>
+			</template>
+			<text v-else-if="!props.dot" class="m-badge__text">{{ badgeText }}</text>
+		</view>
+	</view>
+	<view v-else :class="standaloneClass" :style="rootStyle">
+		<view v-if="visible" :class="standaloneMarkClass" :style="markStyle">
+			<template v-if="hasContentSlot">
+				<slot name="content"></slot>
+			</template>
+			<text v-else-if="!props.dot" class="m-badge__text">{{ badgeText }}</text>
+		</view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	/** 徽标位置：四角方位 */
+	type BadgePosition = 'top-right' | 'top-left' | 'bottom-left' | 'bottom-right'
+
+	type Props = {
+		/** 徽标内容：数字语义用字符串表达（如 "5"）；dot 为 true 时不生效 */
+		content?: string
+		/** 是否展示为小红点（无视 content） */
+		dot?: boolean
+		/** 徽标背景色：支持语义色名（primary / success / warning / danger / white）与 CSS 色值（#hex 等） */
+		color?: string
+		/** 最大值（数字语义字符串）：数字 content 超限时显示 {max}+ */
+		max?: string
+		/** content 为数字 0 时是否展示徽标 */
+		showZero?: boolean
+		/** 徽标位置 */
+		position?: BadgePosition
+		/** 水平偏移量：正值向右、负值向左，纯数字自动补 px */
+		offsetX?: string
+		/** 垂直偏移量：正值向下、负值向上，纯数字自动补 px */
+		offsetY?: string
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		content: '',
+		dot: false,
+		color: '',
+		max: '',
+		showZero: true,
+		position: 'top-right',
+		offsetX: '',
+		offsetY: '',
+		customClass: '',
+		customStyle: ''
+	})
+
+	const slots = useSlots()
+
+	/** 是否传入默认插槽内容（包裹模式 / 独立模式切换依据） */
+	const hasDefaultSlot = computed<boolean>(() => slots.default != null)
+
+	/** 是否传入 content 插槽（自定义徽标内容，优先于 content 文本） */
+	const hasContentSlot = computed<boolean>(() => slots.content != null)
+
+	/** 语义色名单：命中走编译期变体类（绑定 $m-color-* 主题变量，覆盖仍生效），否则视为 CSS 色值走 inline */
+	const semanticColors: string[] = ['primary', 'success', 'warning', 'danger', 'white']
+
+	/** 语义色变体名：color 为语义色名时返回该名，否则空串 */
+	const colorVariant = computed<string>(() => {
+		return semanticColors.indexOf(props.color) >= 0 ? props.color : ''
+	})
+
+	/**
+	 * 数字或纯数字字符串补 px 单位（如 "2" → "2px"），带单位字符串原样返回
+	 */
+	function addUnit(value: string): string {
+		if (value == '') return ''
+		const pattern = new RegExp('^-?\\d+(\\.\\d+)?$')
+		return pattern.test(value) ? value + 'px' : value
+	}
+
+	/** 徽标内容文本：数字语义处理 showZero 隐藏与 max 截断（{max}+），字符串原样展示（如 'Hot'） */
+	const badgeText = computed<string>(() => {
+		const raw = props.content
+		if (raw == '') return ''
+		const n = parseFloat(raw)
+		if (!isNaN(n)) {
+			if (n == 0 && !props.showZero) return ''
+			const maxN = parseFloat(props.max)
+			if (props.max != '' && !isNaN(maxN) && n > maxN) return props.max + '+'
+		}
+		return raw
+	})
+
+	/** 徽标可见性：dot 强制显示；否则需有 content 文本或 content 插槽，且不命中 0 隐藏场景 */
+	const visible = computed<boolean>(() => {
+		if (props.dot) return true
+		if (hasContentSlot.value) return true
+		if (props.content == '') return false
+		const n = parseFloat(props.content)
+		if (!isNaN(n) && n == 0 && !props.showZero) return false
+		return true
+	})
+
+	/** 包裹模式徽标层类名：位置类（绝对定位四角）+ 红点 / 语义色变体类（语义类源码后置，dot 同传时背景以语义色为准） */
+	const markClass = computed<string>(() => {
+		let cls = 'm-badge__mark m-badge--' + props.position
+		if (props.dot) cls += ' m-badge__mark--dot'
+		if (colorVariant.value != '') cls += ' m-badge__mark--' + colorVariant.value
+		return cls
+	})
+
+	/** 独立模式徽标层类名：无位置类（常规流布局），红点 / 语义色变体与包裹模式一致 */
+	const standaloneMarkClass = computed<string>(() => {
+		let cls = 'm-badge__mark m-badge__mark--static'
+		if (props.dot) cls += ' m-badge__mark--dot'
+		if (colorVariant.value != '') cls += ' m-badge__mark--' + colorVariant.value
+		return cls
+	})
+
+	/** 徽标层动态样式：color 为 CSS 色值时背景走 inline（语义色走变体类）；offset 以 margin 叠加（正值向右 / 向下，与四角方位无关） */
+	const markStyle = computed<string>(() => {
+		let style = ''
+		if (props.color != '' && colorVariant.value == '') style += 'background-color: ' + props.color + ';'
+		if (props.offsetX != '') style += 'margin-left: ' + addUnit(props.offsetX) + ';'
+		if (props.offsetY != '') style += 'margin-top: ' + addUnit(props.offsetY) + ';'
+		return style
+	})
+
+	/** 包裹模式根节点类名 */
+	const rootClass = computed<string>(() => {
+		let cls = 'm-badge'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 独立模式根节点类名（自身即徽标，常规流收缩展示） */
+	const standaloneClass = computed<string>(() => {
+		let cls = 'm-badge m-badge--standalone'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 根节点动态样式：customStyle 补分号后拼接 */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		return style
+	})
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss，
+	 * uni.scss 注入机制与组件内引入同一文件会触发循环导入）。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 根节点（包裹模式：relative 容器贴内容，徽标定位基准） ========== */
+	.m-badge {
+		position: relative;
+		/* 收缩宽度贴内容，避免块级默认撑满父容器 */
+		align-self: flex-start;
+		/* uni-app x 中 view 默认 overflow: hidden，徽标中心压角会超出根边界，
+		   必须显式放开裁剪，否则徽标超出一半被裁 */
+		overflow: visible;
+	}
+	/* 独立模式根：自身即徽标，常规流收缩 */
+	.m-badge--standalone {
+		align-self: flex-start;
+	}
+
+	/* ========== 徽标层 ========== */
+	.m-badge__mark {
+		position: absolute;
+		box-sizing: border-box;
+		min-width: $m-badge-min-width;
+		height: $m-badge-height;
+		padding: $m-badge-padding;
+		flex-direction: row;
+		justify-content: center;
+		align-items: center;
+		border-radius: $m-radius-max;
+		background-color: $m-badge-bg;
+	}
+	/* 四角定位：徽标中心压角（半宽平移），偏移量由运行时 margin 叠加 */
+	.m-badge--top-right {
+		top: 0;
+		right: 0;
+		transform: translateY(-50%) translateX(50%);
+	}
+	.m-badge--top-left {
+		top: 0;
+		left: 0;
+		transform: translateY(-50%) translateX(-50%);
+	}
+	.m-badge--bottom-left {
+		bottom: 0;
+		left: 0;
+		transform: translateY(50%) translateX(-50%);
+	}
+	.m-badge--bottom-right {
+		bottom: 0;
+		right: 0;
+		transform: translateY(50%) translateX(50%);
+	}
+	/* 独立模式：脱离四角定位，常规流展示（App 端不支持 static，relative 无偏移与其视觉等效） */
+	.m-badge__mark--static {
+		position: relative;
+	}
+	/* 红点：固定尺寸圆点，清除内边距与最小宽度 */
+	.m-badge__mark--dot {
+		min-width: 0;
+		width: $m-badge-dot-size;
+		height: $m-badge-dot-size;
+		padding: 0;
+		background-color: $m-badge-dot-bg;
+	}
+
+	/* ========== 徽标文字（文字样式只设 text） ========== */
+	.m-badge__text {
+		color: $m-badge-color;
+		font-size: $m-badge-font-size;
+		font-weight: $m-badge-font-weight;
+		line-height: 1.2;
+	}
+
+	/* ========== 语义色变体（color 传语义色名时启用，编译期绑定主题变量，用户覆盖 uni.scss 变量即生效；
+	   源码位于 dot 类之后，红点同传语义色时背景以语义色为准） ========== */
+	.m-badge__mark--primary {
+		background-color: $m-color-primary;
+	}
+	.m-badge__mark--success {
+		background-color: $m-color-success;
+	}
+	.m-badge__mark--warning {
+		background-color: $m-color-warning;
+	}
+	.m-badge__mark--danger {
+		background-color: $m-color-danger;
+	}
+	.m-badge__mark--white {
+		background-color: $m-white;
+	}
+</style>

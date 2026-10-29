@@ -1,0 +1,74 @@
+/**
+ * m-row 与 m-col 的栅格上下文（跨组件共享，独立 .uts）
+ *
+ * gutter 间距方案：row 收集全部 col 上报的 span（24 栅格分组），
+ * 在 row 侧以 computed 派生每个 col 的水平 padding 与垂直 margin-bottom，
+ * 经 provide/inject 下发，col 以自身 id 查询当前下标后以 inline style 消费。
+ * class 实现：非蒸汽（Kotlin/Swift）端不支持「含方法的对象字面量 type」。
+ */
+import { reactive, ComputedRef } from 'vue'
+
+/** provide / inject 配对 key（字符串 key，App 原生端无需 Symbol 支持） */
+export const ROW_KEY: string = '__mxi_row__'
+
+/** col 注册项：唯一 id + 上报的 span 份数 */
+export type ColReg = {
+	id: string
+	span: number
+}
+
+/** 单个 col 的水平间距（px）：left / right 为 padding 值，0 表示不设 */
+export type RowSpace = {
+	left: number
+	right: number
+}
+
+/**
+ * row 注入上下文：维护已挂载 col 的有序注册表（id + span）。
+ * spaces / verticalSpaces 由 row 侧 computed 赋值（下标与 cols 全局顺序对齐）；
+ * col 注册顺序即渲染顺序（setup 同步注册，首帧即为正确下标），
+ * 动态增删 / span 变更后由 reactive 注册表触发 row 与 col 双侧重算。
+ */
+export class RowContext {
+	/** col 注册表（reactive 数组，注册 / 注销 / span 更新自动触发间距重算） */
+	cols: ColReg[] = reactive<ColReg[]>([])
+	/** 水平间距集合（row 侧 computed 赋值，元素下标与 cols 全局下标一致） */
+	spaces: ComputedRef<RowSpace[]> | null = null
+	/** 垂直间距集合（px，row 侧 computed 赋值，0 表示不设 margin-bottom） */
+	verticalSpaces: ComputedRef<number[]> | null = null
+
+	/** 注册 col（col setup 中同步调用，push 顺序即渲染顺序） */
+	register(id: string, span: number): void {
+		this.cols.push({ id: id, span: span } as ColReg)
+	}
+
+	/** 注销 col（onUnmounted 调用，其余 col 下标自动前移并重算间距） */
+	unregister(id: string): void {
+		const index = this.indexOfCol(id)
+		if (index != -1) {
+			this.cols.splice(index, 1)
+		}
+	}
+
+	/** 查询 col 当前下标（动态增删后随 reactive 注册表重算） */
+	indexOfCol(id: string): number {
+		return this.cols.findIndex((col: ColReg): boolean => col.id == id)
+	}
+
+	/** 更新 col 上报的 span（动态 span 场景，col 侧 watch 调用） */
+	setSpan(id: string, span: number): void {
+		const index = this.indexOfCol(id)
+		if (index != -1) {
+			this.cols[index].span = span
+		}
+	}
+}
+
+/** col id 自增计数器（模块级） */
+let colIdCounter = 0
+
+/** 生成全局唯一 col id（col setup 中调用一次） */
+export function generateColId(): string {
+	colIdCounter++
+	return 'mxi_col_' + colIdCounter
+}

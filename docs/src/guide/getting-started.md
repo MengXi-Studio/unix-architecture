@@ -30,7 +30,7 @@ export const settings: AppSettings = {
 | 接口 | 方法 | 响应 |
 | --- | --- | --- |
 | `/user/login` | POST | `{ token }` |
-| `/user/info` | GET | `{ name, avatar }`（需 `Authorization: Bearer <token>` 头，否则 401） |
+| `/user/info` | GET | `{ name, avatar }`（需 `Authorization: Bearer token` 头，否则 401） |
 | `/user/logout` | POST | 任意 |
 
 注意 CORS 需放行 `Authorization` 头。

@@ -13,6 +13,7 @@
 - **UI 组件库集成**（`uni_modules/m-ui-x` v0.1.0，梦曦 unix-ui 的 uni_modules 发行版）：11 个基础组件 easycom 零注册接入，无需 import 与手动注册；主题经根 `uni.scss` 直接定义 `$m-*` 变量编译期覆盖（`!default` 叠加），**禁止** `@import` 插件内 `vars.scss`——uni.scss 注入全组件样式会触发 sass 循环导入，判据已注释存档于 uni.scss。
 - **页面消费替换**：登录页提交按钮替换为 `m-button`（primary + block，`:loading` 绑定 `useLoading` 加载态，加载中自动阻断点击并切换 `loading-text`）；首页退出登录替换为 `m-button`（`danger + plain + hairline` 语义形态）；页面间距按样式隔离规约经外层 view 控制。
 - **ux-router 0.8.2 `backFallback` 接入**（`router/index.uts`）：back() 页面栈不足时兜底 relaunch 回首页——本工程路由表无 `meta.isTab` 路由，深链 / 刷新直连后的返回由 CANCELLED 失败转为走完整守卫链的兜底跳转。
+- **文档站**：新增 `docs/` VitePress 双语使用文档（中英各 10 页：hero 首页 + guide 八篇 + changelog；配置拆分 `config/{index,shared,zh,en}.ts`，自定义主题 + hero 徽章，侧边栏按入门/架构/进阶/精通分组），部署于 GitHub Pages：https://mengxi-studio.github.io/unix-architecture/ ；部署经 ci-core `deploy-docs` dispatch（推 gh-pages 分支），模板仓库保持零工作流。
 
 ### Fixed
 

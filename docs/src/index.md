@@ -5,6 +5,9 @@ hero:
   name: Unix Architecture
   text: uni-app x 工程架构模板
   tagline: 以 api / store / router / 类型体系全分层落地，底层由梦曦插件系（ux-router / ux-pinia / mx-request / ux-storage / ux-utils）承载，Web 端全链路验证
+  image:
+    src: /logo.svg
+    alt: Unix Architecture
   actions:
     - theme: brand
       text: 快速开始

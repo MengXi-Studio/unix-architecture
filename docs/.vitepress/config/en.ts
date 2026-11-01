@@ -40,7 +40,8 @@ export const enConfig: LocaleSpecificConfig<DefaultTheme.Config> = {
 			{
 				text: 'Links',
 				items: [
-					{ text: 'GitHub Repository', link: 'https://github.com/MengXi-Studio/unix-architecture' },
+					{ text: 'Discussions', link: 'https://github.com/MengXi-Studio/unix-architecture/discussions' },
+					{ text: 'Releases', link: 'https://github.com/MengXi-Studio/unix-architecture/releases' },
 					{ text: 'ux-router Docs', link: 'https://mengxi-studio.github.io/unix-router/' },
 					{ text: 'ux-pinia Docs', link: 'https://mengxi-studio.github.io/unix-pinia/' },
 					{ text: 'mx-request Docs', link: 'https://mengxi-studio.github.io/unix-request/' },

@@ -80,7 +80,8 @@ export const zhConfig: LocaleSpecificConfig<DefaultTheme.Config> = {
 					text: '精通',
 					items: [
 						{ text: 'AI 辅助开发', link: '/guide/ai-collab' },
-						{ text: '常见问题', link: '/guide/faq' }
+						{ text: '常见问题', link: '/guide/faq' },
+						{ text: '参与贡献', link: '/guide/contributing' }
 					]
 				}
 			]

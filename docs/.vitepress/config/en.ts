@@ -75,7 +75,8 @@ export const enConfig: LocaleSpecificConfig<DefaultTheme.Config> = {
 					text: 'Mastery',
 					items: [
 						{ text: 'AI-Assisted Development', link: '/en/guide/ai-collab' },
-						{ text: 'FAQ', link: '/en/guide/faq' }
+						{ text: 'FAQ', link: '/en/guide/faq' },
+						{ text: 'Contributing', link: '/en/guide/contributing' }
 					]
 				}
 			]

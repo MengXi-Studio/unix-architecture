@@ -64,5 +64,6 @@ description: 按本项目既定架构标准流程开发新功能或新业务模�
 - 新建 `export * from` 转发、值转发链、跨域复制第三方类型
 - 手改 `routes.gen.uts`、在模块顶层写 configureRequest 等副作用
 - UTS 写法踩线：undefined、truthy 判断、interface 对象字面量、enum 跨端传值、throw 非 Error
+- store 写 setup 式定义 / 经 `storeToRefs` 或 `.value` 访问 state（ux-pinia 0.2.0 已移除该 API，class 式写法见第 3 步）
 - 凭记忆写插件导入路径（一律以 `.trae/rules/architecture.md` 第 1.1 节插件清单为准）
 - 自绘 m-ui-x 已有的组件（动手前先查插件清单组件列表）、在 uni.scss `@import` m-ui-x 的 vars.scss（sass 循环导入）

@@ -45,8 +45,8 @@
 | 类型性质 | 位置 |
 | --- | --- |
 | 跨层共享（api → store → 页面/守卫） | `<域>/types/<file>.uts` + `<域>/types.uts` 聚合出口 |
-| 多文件域的出口形状（如 Store 类型） | 同上 |
-| 单文件模块私有契约 | 就近定义（如 config 的 AppSettings） |
+| 域出口形状（如 store 的 class 类型） | `<域>/types.uts` 具名转发 class 类型（ux-pinia 0.2.0 class 式：出口形状由 class 声明固化，state 契约就近定义） |
+| 单文件模块私有契约 | 就近定义（如 config 的 AppSettings、store 的 XxxState） |
 | 第三方库类型 | `import type` 导入，**绝不复制**进项目 |
 
 - 聚合出口一律**具名类型转发**：`export type { X } from './types/xxx.uts'`。

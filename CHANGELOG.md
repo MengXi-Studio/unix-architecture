@@ -18,6 +18,7 @@
 
 - **发行打包修复**（`uni_modules/ux-storage` / `ux-utils` / `mx-request`）：HBuilderX 5.34 发行流水线的 uts-proxy 对插件入口**导出的字符串常量**生成非法 JS（`genInitCode` 输出未加引号的字符串字面量，如 `= mx_storage:`，esbuild 于 13:44 报 `Expected a semicolon`；dev 模式不触发）。三个插件入口共 9 个无消费方的字符串常量暂去导出（内部 BUILTIN_ 孪生常量不受影响），全部插件 proxy 经 esbuild（js loader）解析验证通过；上游 unix-storage / unix-utils / unix-request 仓库需同步规避。
 - **发行树类型文件修复**（app-android）：发行拷贝不追踪 `export type ... from` 转发链——`api/types/` 与 `composables/types/` 子目录文件不进发行树，分析器解析转发语句报 `index not found`。DTO（`LoginResult` / `UserInfo`）与 `LoadingState` 收敛进 `api/types.uts` / `composables/types.uts` 单文件（与 stores 域模式对齐），架构类型约定同步更新（禁 types/ 子目录转发链，转发仅允许指向运行时可达文件）。
+- **Android 云打包 Kotlin 编译修复**：① `utils/auth.uts` 的 `get(...)` 补显式泛型 `get<string>`（Kotlin 端 T 推断失败）；② `router.guardRoute()` 显式传 `null, null`（5.34 Kotlin 生成器丢弃可选参数默认值）；③ `m-loading` 组件移除 `Animation` 类型句柄 / `slots.default` 脚本检查 / 带 `flush` 的 watch——5.34 Kotlin 生成器对插件组件的上述运行时符号解析失效（type 动态切换改由使用方 `:key` 重建组件触发）。
 
 ### Verified
 

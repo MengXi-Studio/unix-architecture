@@ -82,7 +82,8 @@ export function setupPermission(): void {
   router.beforeEach(authGuard)
 
   // 冷启动补跑守卫链：无 token 时守卫返回 redirect，自动 relaunch 至登录页
+  // 显式传 null：5.34 Kotlin 生成器丢弃可选参数默认值，无参调用报 No value passed for parameter
   router.isReady().then(() => {
-    router.guardRoute()
+    router.guardRoute(null, null)
   })
 }

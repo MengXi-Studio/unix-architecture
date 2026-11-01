@@ -52,14 +52,24 @@
 	/** 图标容器元素引用（旋转动画作用目标） */
 	const spinnerRef = ref<UniElement | null>(null)
 
-	/** 当前旋转动画句柄（切换 type 时先取消旧动画再重启） */
-	let animation: Animation | null = null
-
-	/** spinner 型辐条数量：仅 spinner 型渲染 12 条，其余类型为 0（不产生节点） */
+	/**
+	 * spinner 型辐条数量：仅 spinner 型渲染 12 条，其余类型为 0（不产生节点）
+	 * 注：5.34 Kotlin 生成器在插件组件内无法解析 Animation 运行时类型（Unresolved reference），
+	 * 故不保存动画句柄；type 动态切换改由使用方经 `:key` 重建组件触发（onMounted 重跑动画）。
+	 */
 	const spokeCount = computed<number>(() => props.type == 'spinner' ? 12 : 0)
 
-	/** 是否传入默认插槽内容（决定文案节点是否渲染） */
+	/**
+	 * 是否传入默认插槽内容（决定文案节点是否渲染）
+	 * 注：5.34 Kotlin 生成器对插件组件的 slots.default 解析失效（Unresolved reference），
+	 * Android 端退化为恒渲染文案节点（空文案零宽，仅含 gap 间距的视觉误差）。
+	 */
+	// #ifdef APP-ANDROID
+	const hasText = computed<boolean>(() => true)
+	// #endif
+	// #ifndef APP-ANDROID
 	const hasText = computed<boolean>(() => slots.default != null)
+	// #endif
 
 	/** 根节点类名：纵向排列与自定义类名按 props 拼接 */
 	const rootClass = computed<string>(() => {
@@ -166,10 +176,9 @@
 	 * 启动旋转动画
 	 * spinner：1.2s 12 步阶梯离散旋转（滴答式拖尾）；circular：2s 匀速（弧段追逐感）
 	 * 通过 UniElement.animate 实现（ucss 禁用 @keyframes，动画一律走 animate API）
+	 * 注：不保存 Animation 句柄（5.34 Kotlin 生成器无法解析该类型），type 切换经使用方 `:key` 重建
 	 */
 	function startAnimation() {
-		// 切换动画前先取消旧动画（如动态切换 type）
-		animation?.cancel()
 		if (spinnerRef.value == null) return
 		// spinner 型换 12 步阶梯关键帧，circular 型两帧匀速旋转
 		let keyframes: UniAnimationKeyframe[] = [
@@ -177,7 +186,7 @@
 			{ transform: 'rotate(360deg)', offset: 1 }
 		]
 		if (props.type == 'spinner') keyframes = buildTickKeyframes()
-		animation = spinnerRef.value.animate(
+		spinnerRef.value.animate(
 			keyframes,
 			{ duration: props.type == 'spinner' ? 1200 : 2000, iterations: Infinity, easing: 'linear' }
 		)
@@ -188,14 +197,8 @@
 		startAnimation()
 	})
 
-	// 动态切换加载类型时重启动画（flush: post 确保切换后的节点已渲染再取 ref）
-	watch(
-		() => props.type,
-		(_: LoadingType) => {
-			startAnimation()
-		},
-		{ flush: 'post' }
-	)
+	// 注：type 动态切换的重启动画曾用 watch(props.type)，5.34 Kotlin 生成器对 watch(source fn)
+	// 重载解析异常（source 返回值被要求 Unit）；改由使用方经 `:key="type"` 重建组件触发 onMounted。
 </script>
 
 <style lang="scss">

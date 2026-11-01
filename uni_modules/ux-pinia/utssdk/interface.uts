@@ -11,20 +11,17 @@
 /** Pinia 实例类型（class 定义在 pinia/pinia.uts，此处 import type 供上下文引用） */
 import type { Pinia } from './pinia/pinia.uts'
 
-/** 订阅取消函数（字段级 watch / 预留订阅生态的返回形态） */
+/** 订阅取消函数（$subscribe / $onAction 的返回形态） */
 export type Unsubscribe = () => void
-
-/** 订阅回调（v1 简化形态：无参数；整体 subscribe 已裁掉，见差异对照表） */
-export type SubscribeCallback = () => void
 
 /**
  * 插件上下文：对齐标准 Pinia 的 { pinia, store, storeId } 三字段。
- * store 为 any（使用处 as 收窄为具体 store 类型），满足 UTS 名义类型系统。
+ * store 为 any（使用处 as PiniaStoreBase 访问基类能力），满足 UTS 名义类型系统。
  */
 export type PiniaPluginContext = {
 	/** 当前 Pinia 实例 */
 	pinia: Pinia
-	/** 刚创建的 store 实例 */
+	/** 刚创建的 store 实例（PiniaStoreBase 子类） */
 	store: any
 	/** store id */
 	storeId: string
@@ -32,7 +29,22 @@ export type PiniaPluginContext = {
 
 /**
  * 插件函数类型。UTS 约束：返回 void——禁止向既有对象动态注入属性，
- * 故裁掉标准 Pinia「插件返回对象合并进 store」的能力，插件逻辑通过 ctx 完成。
+ * 故裁掉标准 Pinia「插件返回对象合并进 store」的能力，插件逻辑通过 ctx 完成
+ * （ctx.store as PiniaStoreBase 后可用 $subscribe / $onAction 等 hook）。
  * 注意 UTS 函数类型必须用箭头语法。
  */
 export type PiniaPlugin = (ctx: PiniaPluginContext) => void
+
+/**
+ * 存储适配器（持久化后端）：让使用者自选持久化后端
+ * （unix-storage / uni storage / 原生 preferences）。
+ * 默认实现基于 uni.getStorageSync / uni.setStorageSync / uni.removeStorageSync（零依赖）。
+ */
+export type StorageAdapter = {
+	/** 读取原始字符串；未命中返回 null */
+	get: (key: string) => string | null
+	/** 写入原始字符串 */
+	set: (key: string, value: string) => void
+	/** 删除指定键 */
+	remove: (key: string) => void
+}

@@ -1,7 +1,7 @@
 /**
  * 路由错误码枚举
  *
- * 数值对齐 vue-router 4 的 NavigationFailureType：
+ * 错误码分组：
  * - ABORTED（导航被守卫中止，返回 false）
  * - CANCELLED（守卫抛错 / 重定向超过深度上限）
  * - DUPLICATED（重复导航到当前地址）

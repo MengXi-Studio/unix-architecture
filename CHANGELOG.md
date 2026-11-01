@@ -2,16 +2,21 @@
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 格式，版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [1.1.0] - 2026-10-29
+## [1.1.0] - 2026-11-01
+
+### Changed
+
+- **ux-pinia 0.1.0 → 0.2.0 强制迁移**（插件 setup 式 API 移除，破坏性升级）：`stores/modules/user.uts` 重写为 class 式 `UserStore extends PiniaStoreBase`（state `reactive<T>` 包裹、action method 化、constructor `bindState`）；`stores/types/user.uts` 删除（class 声明即出口形状，`UserState` 按判据就近定义），`stores/types.uts` 改为转发 class 类型；`pages/index/index.uvue` 与 `router/permission.uts` 的 `storeToRefs` / `.value` 访问改为 `store.state.字段` 直读。
 
 ### Added
 
 - **UI 组件库集成**（`uni_modules/m-ui-x` v0.1.0，梦曦 unix-ui 的 uni_modules 发行版）：11 个基础组件 easycom 零注册接入，无需 import 与手动注册；主题经根 `uni.scss` 直接定义 `$m-*` 变量编译期覆盖（`!default` 叠加），**禁止** `@import` 插件内 `vars.scss`——uni.scss 注入全组件样式会触发 sass 循环导入，判据已注释存档于 uni.scss。
 - **页面消费替换**：登录页提交按钮替换为 `m-button`（primary + block，`:loading` 绑定 `useLoading` 加载态，加载中自动阻断点击并切换 `loading-text`）；首页退出登录替换为 `m-button`（`danger + plain + hairline` 语义形态）；页面间距按样式隔离规约经外层 view 控制。
+- **ux-router 0.8.2 `backFallback` 接入**（`router/index.uts`）：back() 页面栈不足时兜底 relaunch 回首页——本工程路由表无 `meta.isTab` 路由，深链 / 刷新直连后的返回由 CANCELLED 失败转为走完整守卫链的兜底跳转。
 
 ### Verified
 
-- Web 端（HBuilderX 5.26 / VDOM / vapor）实测：编译成功且无 m-ui-x 相关错误（存量警告均为 ux-utils 插件内部既有项）；浏览器实测登录页 m-button 渲染正确（块级主题色圆角，非浏览器默认样式）、无 token 冷启动守卫重定向正常、控制台无红色报错。
+- Web 端（HBuilderX 5.34 / VDOM / vapor）登录闭环 E2E 实测：冷启动守卫重定向 → 登录（m-button）→ `[unix-pinia] store 'user' 已创建`（class 实例化正常）→ GET /user/info 200（Bearer 注入正常）→ 首页「欢迎，梦曦用户」reactive 渲染 → 退出确认 modal → 清理登录态回登录页；控制台无错误。token 持久化经评审维持 `utils/auth.uts` 现状（不迁移内置持久化插件，判据存档于任务文档 Q1）。
 
 ## [1.0.0] - 2026-10-21
 

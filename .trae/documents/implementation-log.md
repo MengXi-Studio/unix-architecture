@@ -7,4 +7,4 @@
 - [YYYY-MM-DD] [任务文档](相对链接) — <一句话结果；遗留 TODO 数>
 -->
 
-（暂无记录）
+- [2026-11-01] [stores-ux-pinia迁移](优化/2026-11-01/stores-ux-pinia迁移.md) — ux-pinia 0.2.0 破坏性迁移（store class 化）+ ux-router 0.8.2 backFallback 接入，E2E 登录闭环验证通过；遗留 TODO 无

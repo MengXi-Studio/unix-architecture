@@ -1,53 +1,65 @@
 /**
  * unix-pinia 插件跨平台根入口（uni_modules UTS 插件）
  *
- * 官方架构（对齐 unix-storage）：本文件即无平台目录端（全端）的实现入口。
- * 对外 API 一律在本入口**内联声明**（export function 具名实现，转发领域层
- * Impl 函数）——红线：不得用 export { x } from 转发链对外暴露 API，
- * uts-proxy V1 只解析本入口的内联声明（云打包 Kotlin 编译实证）。
+ * 0.2.0 架构定稿：**class + reactive**。
+ * 放弃 setup 式 + Ref 形态（UTS 无 Proxy/反射 + HBuilderX 5.34 编译器对 UTS 插件内
+ * 运行时类 vue 符号的 Kotlin import 生成失效，双重不可实现），换取完整 Pinia 功能面：
+ * $patch / $reset / $subscribe / $onAction / $dispose / $id / $state + 内置持久化插件。
  *
- * 红线（unix-storage 实战）：
- * 1. 插件内所有 .uts 同 Kotlin package，实现函数一律 Impl 后缀，
- *    避免同名 top-level 符号触发导出符号静默重整（__1）；
- * 2. 对外类型集中于 interface.uts，入口经 export type 转发（类型转发
- *    可用，API 函数转发不可用）；Pinia class 经 import type 使返回类型
- *    对入口可见（Kotlin 生成器只为入口可见类型生成定义）。
+ * 使用形态：
+ * ```
+ * export class CounterStore extends PiniaStoreBase {
+ *     state: CounterState = reactive<CounterState>({ count: 0 })
+ *     constructor() { super(); this.bindState(this.state) }
+ *     increment(): void { this.state.count++ }
+ * }
+ * export const useCounterStore = defineStore<CounterStore>('counter', (): CounterStore => new CounterStore())
+ * ```
+ * 页面消费：`counter.state.count`（模板响应式）/ `counter.increment()` / `counter.$reset()`
+ *
+ * 红线（unix-storage / 5.34 云打包实战）：
+ * 1. 对外 API 一律本入口内联声明（export function/class 具名实现，转发领域层 Impl 函数）；
+ *    uts-proxy V1 只解析本入口的内联声明，转发链在云打包 Kotlin 编译时丢失
+ * 2. 实现函数一律 Impl 后缀，避免同名 top-level 符号触发 Kotlin 导出符号静默重整
+ * 3. 对外类型集中于 interface.uts / store-base.uts，入口经 export type/class 转发
+ * 4. 入口 import 必须列全实现符号（Web 端 JS 动态解析不报错，云打包 Kotlin 静态编译报 Unresolved）
+ * 5. 插件内禁止运行时类 vue 符号（Ref/ref/watch/effectScope——5.34 Kotlin import 生成失效）；
+ *    reactive/computed 为编译期展开可用
  */
 import type { Pinia } from './pinia/pinia.uts'
+import type { PiniaStoreBase } from './pinia/store-base.uts'
+import type { PiniaPlugin, StorageAdapter } from './interface.uts'
 import { createPiniaImpl, setActivePiniaImpl, getActivePiniaImpl } from './pinia/pinia.uts'
 import { defineStoreImpl } from './pinia/defineStore.uts'
-import { storeToRefsImpl } from './pinia/storeToRefs.uts'
-import { patchImpl, disposeImpl, getStoreIdImpl } from './pinia/instanceApi.uts'
+import { disposeImpl, getStoreIdImpl } from './pinia/instanceApi.uts'
+import { setStorageAdapterImpl } from './persist/storage.uts'
+import { createPersistPluginImpl, clearPersistedStateImpl } from './persist/persist-plugin.uts'
+import type { PersistOptions } from './persist/persist-plugin.uts'
 
 /**
- * 对外类型转发（同目录 interface.uts，非跨级 re-export）：
- * 消费方 import type { PiniaPlugin } from '@/uni_modules/ux-pinia'
- * 须经本入口解析；Pinia class（pinia/pinia.uts）作类型标注转发。
+ * 对外类型转发（类型转发可用，API 函数转发不可用——红线 1）：
+ * Pinia class / PiniaStoreBase class 经 import type 转发；其余类型来自 interface.uts
+ * 与 persist-plugin.uts。
  */
-export type { Unsubscribe, SubscribeCallback, PiniaPlugin, PiniaPluginContext } from './interface.uts'
+export type { Unsubscribe, PiniaPlugin, PiniaPluginContext, StorageAdapter } from './interface.uts'
 export type { Pinia } from './pinia/pinia.uts'
+export type { PiniaStoreBase, StateChangeCallback, ActionInfo, ActionChangeCallback } from './pinia/store-base.uts'
+export type { PersistOptions } from './persist/persist-plugin.uts'
 
-/* ============ 定义与使用（export function 具名声明） ============ */
-
-/**
- * 定义一个 setup 式 store
- * @param id 全局唯一标识（命名建议域名式反写，如 'user.profile'）
- * @param setup 工厂函数：state 用 Ref、getter 用 ComputedRef、action 用箭头函数，
- *              返回显式 type 标注的对象
- * @returns useStore 函数；首次调用执行 setup，后续调用返回同一实例（跨页面共享）
- */
-export function defineStore<T>(id: string, setup: () => T): () => T {
-	return defineStoreImpl<T>(id, setup)
-}
+/* ============ 定义与使用 ============ */
 
 /**
- * 将 store 转为 ref 集合，供 uvue 模板解构后自动解包绑定（幂等）
+ * 定义一个 class 式 store
+ * @param id 全局唯一标识（建议域名式反写，如 'user.profile'）
+ * @param factory 工厂函数：返回 PiniaStoreBase 子类实例（new CounterStore()）
+ * @returns useStore 函数；首次调用创建实例并注入 $id / dispose 钩子 / 调度插件，
+ *          后续调用返回同一实例（跨页面共享）
  */
-export function storeToRefs<T>(store: T): T {
-	return storeToRefsImpl<T>(store)
+export function defineStore<T>(id: string, factory: () => T): () => T {
+	return defineStoreImpl<T>(id, factory)
 }
 
-/* ============ Pinia 实例（=createPinia / setActivePinia / getActivePinia） ============ */
+/* ============ Pinia 实例（createPinia / setActivePinia / getActivePinia） ============ */
 
 /**
  * 创建 Pinia 实例（承载插件列表）。
@@ -68,18 +80,10 @@ export function getActivePinia(): Pinia | null {
 	return getActivePiniaImpl()
 }
 
-/* ============ 实例 API（$-methods 的顶层函数映射） ============ */
+/* ============ 实例 API 的顶层补充（跨实例通用操作） ============ */
 
 /**
- * ≙ store.$patch(fn)：批量修改状态（仅 mutator 形态；
- * 对象形态依赖 Partial<T> 与字段反射，UTS 不可实现，见差异对照表）
- */
-export function patch<T>(store: T, fn: (s: T) => void): void {
-	patchImpl<T>(store, fn)
-}
-
-/**
- * ≙ store.$dispose()：注销实例，下次 useStore() 重新执行 setup 重建。
+ * ≙ store.$dispose()：注销实例，下次 useStore() 重新创建。
  * 注意既有引用将指向孤儿实例，仅用于应用级清理场景。
  */
 export function dispose<T>(store: T): void {
@@ -91,4 +95,35 @@ export function dispose<T>(store: T): void {
  */
 export function getStoreId<T>(store: T): string {
 	return getStoreIdImpl<T>(store)
+}
+
+/* ============ 持久化（内置插件） ============ */
+
+/**
+ * 创建持久化插件（main.uts 顶层登记）：
+ * `setActivePinia(createPinia().use(createPersistPlugin({ keyPrefix: 'ux-pinia:', ... })))`
+ *
+ * 语义：
+ * - 恢复：store 创建时读存储 → store._hydrate(data)（自动）
+ * - 落盘：store.$patch / $reset / $save 触发 _serialize() 快照写存储（自动）
+ * - 前提：store 按需重写 _serialize() / _hydrate()（不重写则该 store 持久化为空操作）
+ */
+export function createPersistPlugin(options: PersistOptions): PiniaPlugin {
+	return createPersistPluginImpl(options)
+}
+
+/**
+ * 清空指定 store 的持久化数据
+ * @param keyPrefix 与 createPersistPlugin 的 keyPrefix 保持一致
+ */
+export function clearPersistedState(storeId: string, keyPrefix: string): void {
+	clearPersistedStateImpl(storeId, keyPrefix)
+}
+
+/**
+ * 替换存储后端（可选）。默认基于 uni storage；
+ * 换 unix-storage / 原生 preferences 时实现 StorageAdapter，并在创建任何 store 前调用。
+ */
+export function setStorageAdapter(next: StorageAdapter): void {
+	setStorageAdapterImpl(next)
 }

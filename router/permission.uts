@@ -51,7 +51,7 @@ const authGuard = async (to: RouteLocation, from: RouteLocation): Promise<boolea
     }
 
     const userStore = useUserStore()
-    if (userStore.name.value.length > 0) {
+    if (userStore.state.name.length > 0) {
       return true
     }
 

@@ -1,0 +1,70 @@
+/**
+ * 持久化存储层（实现层，纯存储原语——零 vue 符号）
+ *
+ * 0.2.0 调整：键粒度从「字段级（前缀:storeId.key，JSON 信封）」改为「store 级
+ * （前缀 + storeId，_serialize() 全量快照）」——class + reactive 架构下持久化由
+ * _serialize/_hydrate 钩子驱动（Template Method），快照整体读写。
+ * 后端可经 setStorageAdapterImpl 替换（unix-storage / 原生 preferences 等）。
+ *
+ * Kotlin 红线（云打包 release 实证，HBuilderX 5.34）：
+ * - 零 vue 符号：vue 符号的 Kotlin import 生成失效，插件内保持零 vue 依赖
+ * - uni.getStorageSync 返回 Any?：any 声明必须带 | null
+ * - 适配器 lambda 内不做单步 Any?→String? 强转，分步显式标注
+ */
+import type { StorageAdapter } from '../interface.uts'
+
+/** 默认键前缀（与 createPersistPlugin 的 keyPrefix 默认值一致） */
+export const PERSIST_KEY_PREFIX = 'ux-pinia:'
+
+/** 默认读取：uni storage（未命中返回空串），归一为 string | null */
+const defaultGet = (key: string): string | null => {
+	// getStorageSync 返回 Any?：any 声明必须带 | null（Kotlin 端 Any? 赋非空 Any 编译报错）
+	const raw: any | null = uni.getStorageSync(key)
+	if (raw == null) {
+		return null
+	}
+	const text: string = raw as string
+	if (text.length == 0) {
+		return null
+	}
+	return text
+}
+
+/** 默认写入：uni storage */
+const defaultSet = (key: string, value: string): void => {
+	uni.setStorageSync(key, value as any)
+}
+
+/** 默认删除：uni storage */
+const defaultRemove = (key: string): void => {
+	uni.removeStorageSync(key)
+}
+
+/** 当前存储适配器（默认 uni storage，可经 setStorageAdapterImpl 替换） */
+let adapter: StorageAdapter = { get: defaultGet, set: defaultSet, remove: defaultRemove }
+
+/** 替换存储后端（实现「使用者自选持久化库」：unix-storage / 原生 preferences 等） */
+export function setStorageAdapterImpl(next: StorageAdapter): void {
+	adapter = next
+}
+
+/** 读原始字符串；未命中返回 null */
+export function getStorageRaw(key: string): string | null {
+	// adapter.get 经对象字面量桥接后 Kotlin 端表达式类型为 Any?：先以 any | null 承载，再显式收窄 string
+	const rawAny: any | null = adapter.get(key)
+	if (rawAny == null) {
+		return null
+	}
+	const raw: string = rawAny as string
+	return raw
+}
+
+/** 写原始字符串 */
+export function setStorageRaw(key: string, value: string): void {
+	adapter.set(key, value)
+}
+
+/** 删除指定键 */
+export function removeStorageRaw(key: string): void {
+	adapter.remove(key)
+}

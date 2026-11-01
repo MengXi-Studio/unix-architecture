@@ -38,11 +38,18 @@ export type RouterOptions = {
 	 * App/小程序 透传原生 animationType；H5 端由插件以 CSS 动画实现。
 	 */
 	animation?: NavigationAnimation
+	/**
+	 * 返回栈底兜底目标（back() 页面栈不足时自动重载的页面，路径或命名路由）。
+	 * 适用场景：H5 刷新 / 冷启动直连非首页后返回、App 端冷启动深链后无处可退。
+	 * 未配置时自动取路由表中首个 meta.isTab 路由；两者皆无时栈深不足维持 CANCELLED 失败。
+	 * 显式配置优先级高于 isTab 自动推断。
+	 */
+	backFallback?: RouteLocationRaw
 }
 
 /**
  * 路由器实例接口
- * 提供 vue-router 风格的路由导航、守卫注册与状态查询能力（适配 uni-app x）
+ * 提供路由导航、守卫注册与状态查询能力（适配 uni-app x）
  */
 export interface Router {
 	/** 当前路由位置 */

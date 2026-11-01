@@ -2,7 +2,7 @@
  * Params 存储管理器
  *
  * 管理页面参数的存储与读取，支持内存 Map 与 uni storage 两种方式。
- * 使用 uni-router 相同的「内存/持久化 + key」模式。
+ * 使用「内存/持久化 + key」两种存储模式。
  * class 实现：非蒸汽（Kotlin/Swift）端不支持「含方法的对象字面量 type」。
  */
 import type { ParamObject } from '../../types/route'

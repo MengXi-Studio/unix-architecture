@@ -1,7 +1,21 @@
 /**
  * 路由位置比较工具
  */
-import type { RouteLocation } from '../types'
+import type { RouteConfig, RouteLocation, RouteMeta } from '../types'
+
+/**
+ * 取路由表中首个声明 isTab 的路由路径（入口页兜底目标）。
+ * 用于 back() 页面栈不足与拦截器根路径 reLaunch 的「回首页」兜底；无 tabBar 路由时返回 null。
+ */
+export function findFirstTabRoutePath(routes: RouteConfig[]): string | null {
+	for (var i = 0; i < routes.length; i++) {
+		const meta: RouteMeta | null = routes[i].meta
+		if (meta != null && meta.isTab === true) {
+			return routes[i].path
+		}
+	}
+	return null
+}
 
 /**
  * 判断两个路由位置是否相同（路径 + 查询 + 参数 + hash 完全一致）

@@ -26,9 +26,9 @@ description: 按本项目既定架构标准流程开发新功能或新业务模�
 
 ## 3. store 模块（stores/）
 
-- `stores/types/<domain>.uts` 定义 `XxxStore` 类型（state 用 Ref、action 用箭头函数签名）→ `stores/types.uts` 补转发。
-- `stores/modules/<domain>.uts`：setup 式 `defineStore<XxxStore>('<domain>', (): XxxStore => {...})`，返回值 `as XxxStore` 收尾；action 内调 api 函数。
-- 令牌相关写 `utils/auth.uts`；跨 store 依赖直接在 setup 内调用对方 `useXxxStore`（注册表保证单例）。
+- `stores/modules/<domain>.uts`：class 式——`class XxxStore extends PiniaStoreBase`，state 用 `reactive<XxxState>` 包裹（字段直读写，无 `.value`；`import { reactive } from 'vue'`）、派生值用 class getter（**禁 computed 字段**：插件内 effectScope 不可用，跨页面失效）、action 为普通 method，constructor 中 `super()` 后必须 `this.bindState(this.state)`；注册写 `export const useXxxStore = defineStore<XxxStore>('<domain>', (): XxxStore => new XxxStore())`，action 内调 api 函数。
+- state 类型（`XxxState`）按「单文件模块私有契约就近定义」在模块内 export；`stores/types.uts` 追加一行转发：`export type { XxxStore } from './modules/<domain>.uts'`。
+- 令牌相关写 `utils/auth.uts`（token 不用内置持久化插件承载，职责分离）；跨 store 依赖在 method 内调用对方 `useXxxStore`（注册表保证单例，不放字段初始化器）。
 
 ## 4. 页面 / 组件
 

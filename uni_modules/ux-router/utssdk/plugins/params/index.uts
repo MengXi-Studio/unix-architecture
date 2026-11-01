@@ -1,5 +1,5 @@
 /**
- * ParamsPlugin - 页面参数管理插件（对齐 uni-router）
+ * ParamsPlugin - 页面参数管理插件
  *
  * 将页面参数存入 ParamsManager，通过 URL query 中的 __params_key 关联传递：
  * - onEnrichLocation：把 location.params 存入 manager 并生成 key 注入 query

@@ -1,9 +1,9 @@
 /**
  * 路由器主类与 createRouter
  *
- * 提供 vue-router 风格的导航、守卫注册、状态查询与插件扩展能力，适配 uni-app x 静态页面模型。
+ * 提供导航、守卫注册、状态查询与插件扩展能力，适配 uni-app x 静态页面模型。
  * 底层基于 uni.* 原生导航 API 与原生页面栈（getCurrentPages）实现；
- * 扩展能力通过插件（plugins）提供，对齐 uni-router 的核心 + 插件架构。
+ * 扩展能力通过插件（plugins）提供，采用核心 + 插件架构。
  */
 import type { App } from 'vue'
 import type {
@@ -37,7 +37,7 @@ import { normalizePath, warn, buildFullPath } from '../utils'
 import { setActiveGlobalRouter, setGlobalCurrentRoute } from '../store'
 import { markRouterCall } from '../plugins/interceptor'
 import { createParamsManager } from '../plugins/params'
-import { isSameRouteLocation } from './location'
+import { isSameRouteLocation, findFirstTabRoutePath } from './location'
 import type { NavigationMode } from './type'
 
 /**
@@ -54,11 +54,13 @@ class UniRouter implements Router {
 	private guardTimeout: number
 	private readyTimeout: number
 	private strict: boolean
+	private backFallbackRoute: RouteLocationRaw | null = null
 
 	constructor(options: RouterOptions) {
 		this.strict = options.strict ?? true
 		this.guardTimeout = options.guardTimeout ?? DEFAULT_GUARD_TIMEOUT
 		this.readyTimeout = options.readyTimeout ?? DEFAULT_READY_TIMEOUT
+		this.backFallbackRoute = options.backFallback != null ? options.backFallback : null
 		this.guardManager = createGuardManager()
 		this.matcher = createRouteMatcher(options.routes, this.strict)
 		this.routeState = createRouteState(this.readyTimeout)
@@ -91,7 +93,7 @@ class UniRouter implements Router {
 		return this.performNavigation(location, 'relaunch')
 	}
 
-	/** 返回上一页或多级页面（uni.navigateBack） */
+	/** 返回上一页或多级页面（uni.navigateBack）；调用端需显式传 delta（UTS 接口默认值不受支持，App 端可选参数会生成必填 Kotlin 参数）。页面栈不足时兜底重载首个 tabBar 页（冷启动/H5 刷新直连场景），无 tabBar 路由则返回 CANCELLED 失败 */
 	async back(delta: number | null): Promise<NavigationResult> {
 		if (this.pendingNavigation != null) {
 			await this.pendingNavigation.catch(() => {})
@@ -103,7 +105,7 @@ class UniRouter implements Router {
 		}
 		const pages = getCurrentPagesSafe()
 		if (pages.length < 2 || d >= pages.length) {
-			return this.failNavigation(from, from, new NavigationFailure(RouterErrorCode.CANCELLED, '无法返回：页面栈中没有足够的上一页', from, from))
+			return this.backWithStackFallback(from)
 		}
 		const targetPage = pages[pages.length - 1 - d]
 		const targetPath = '/' + targetPage.route
@@ -147,6 +149,26 @@ class UniRouter implements Router {
 
 	beforeEach(guard: NavigationGuard): () => void {
 		return this.guardManager.beforeEach(guard)
+	}
+
+	/**
+	 * back() 页面栈不足时的兜底：优先 RouterOptions.backFallback 显式配置，否则重载首个 tabBar 页
+	 * （uni-app 官方推荐的「返回失败回首页」模式）。
+	 * 场景：H5 刷新 / 冷启动直连非首页（页面栈仅 1 层），uni.navigateBack 无处可退导致返回无效。
+	 * 兜底经 relaunch 走完整守卫链（requireAuth 等拦截仍然生效）；无配置且无 tabBar 路由时维持 CANCELLED 失败。
+	 */
+	private async backWithStackFallback(from: RouteLocation): Promise<NavigationResult> {
+		// 显式配置的兜底目标优先（覆盖无 tabBar 工程，如自绘导航的组件演示应用）
+		if (this.backFallbackRoute != null) {
+			warn('back() 页面栈中无上一页（冷启动/刷新直连），按 backFallback 配置兜底重载')
+			return this.relaunch(this.backFallbackRoute)
+		}
+		const entryPath = findFirstTabRoutePath(this.matcher.getRoutes())
+		if (entryPath !== null) {
+			warn(`back() 页面栈中无上一页（冷启动/刷新直连），兜底重载入口页: /${entryPath}`)
+			return this.relaunch('/' + entryPath)
+		}
+		return this.failNavigation(from, from, new NavigationFailure(RouterErrorCode.CANCELLED, '无法返回：页面栈中没有足够的上一页', from, from))
 	}
 
 	beforeResolve(guard: NavigationGuard): () => void {

@@ -19,7 +19,7 @@
 | 插件 | 职责 | 导入路径 | 常用 API |
 | --- | --- | --- | --- |
 | ux-router | 路由 / 守卫 / 组合式 | `@/uni_modules/ux-router/utssdk/index.uts`（注意带 utssdk 后缀） | `useRouter` / `useRoute` / `queryInt` / `queryBool` |
-| ux-pinia | 状态管理（免挂载） | `@/uni_modules/ux-pinia` | `defineStore` / `storeToRefs` |
+| ux-pinia | 状态管理（class 式，免挂载） | `@/uni_modules/ux-pinia` | `defineStore` / `PiniaStoreBase` / `createPersistPlugin`（`reactive` 自 vue 导入；`storeToRefs` 已于 0.2.0 移除） |
 | mx-request | 网络请求 | `@/uni_modules/mx-request` | `request` / `configureRequest` / `useRequestInterceptor` / `useResponseInterceptor` |
 | ux-storage | 持久化（异步） | `@/uni_modules/ux-storage` | `set` / `get` / `remove` / `createStorage` |
 | ux-utils | toast / modal（全端自绘） | `@/uni_modules/ux-utils` | `showToast` / `showToastAsync` / `showModalAsync` / `showModalAlert` |

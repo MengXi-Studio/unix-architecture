@@ -36,13 +36,11 @@ uni-app x 的页面是编译期静态模型（多端编译到 JS / Kotlin / Swif
 │   └── types/
 │       └── api.uts           # DTO 唯一事实源（LoginResult / UserInfo）
 │
-├── stores/                   # 状态层：ux-pinia 免挂载，模块级注册表即全局单例
+├── stores/                   # 状态层：ux-pinia class 式 store，免挂载（模块级注册表即全局单例）
 │   ├── index.uts             # useXxxStore 出口
-│   ├── types.uts             # 域类型聚合出口
-│   ├── types/
-│   │   └── user.uts          # UserStore 定义
+│   ├── types.uts             # 域类型聚合出口（转发 store class 类型）
 │   └── modules/
-│       └── user.uts          # token/name/avatar + login/getInfo/logout/resetToken
+│       └── user.uts          # UserStore class：state(reactive) + login/getInfo/logout/resetToken
 │
 ├── composables/              # 组合式函数：函数无出口（按需直接导入），类型走聚合出口
 │   ├── useLoading.uts
@@ -134,7 +132,7 @@ await ensureAuthReady()           // 异步守卫（ux-router 守卫链支持 aw
 ## 5. 各域细则
 
 - **api/**：薄封装；响应以 `UTSJSONObject` 承载、在 api 层还原为 DTO 后上抛；`JSON.parse<T>` 解析失败（返回 null）即 throw 快速失败。
-- **stores/**：setup 式 `defineStore<T>(id, setup)`，state 用 `Ref`、action 用箭头函数、返回值 `as T` 收尾；免挂载，无需聚合实例（`stores/index.uts` 仅作消费入口）。
+- **stores/**：ux-pinia 0.2.0 class 式——`class XxxStore extends PiniaStoreBase`，state 用 `reactive<T>` 包裹（字段直读写，无 `.value`）、派生值用 class getter（禁 computed 字段：插件内 effectScope 不可用）、action 为普通 method，constructor 中 `super()` 后必须 `this.bindState(this.state)`；`defineStore<XxxStore>(id, () => new XxxStore())` 注册，免挂载（`stores/index.uts` 仅作消费入口）。token 持久化不走内置持久化插件（职责分离，判据存档于任务文档）。
 - **composables/**：函数从 `<name>.uts` 直接导入；类型经 `types.uts`；UTS 类型属性方法不支持泛型（uts110111161）——`run` 仅收 `() => Promise<void>` 任务，带返回值需求扩展 `useTask<T>` 而非给函数加泛型。
 - **components/**：easycom 免注册；组件内只管自身样式，页面间距经外层 view 控制（规避样式隔离对组件根节点的约束）。
 - **第三方 UI（uni_modules/m-ui-x）**：11 个基础组件 easycom 零注册；主题经根 `uni.scss` 直接定义 `$m-*` 变量编译期覆盖，**禁止** `@import` 其 `vars.scss`（uni.scss 注入全组件样式，会触发 sass 循环导入，判据已注释存档）。

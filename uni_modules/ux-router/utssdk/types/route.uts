@@ -2,7 +2,7 @@
  * 路由核心类型定义
  *
  * 由于 uni-app x 采用静态 pages.json 页面模型（页面路径即路由路径），
- * 此处将 vue-router 的 RouteRecord / RouteLocation 泛化为扁平记录，
+ * 此处将路由记录 / 路由位置泛化为扁平记录，
  * 但保持其对外 API 语义一致（path / name / query / params / meta / hash）。
  */
 
@@ -132,7 +132,7 @@ export type NavigationAnimation = {
 
 /**
  * 已解析并规范化的路由位置
- * 对应 vue-router 中 useRoute() / currentRoute 返回的对象
+ * 对应 useRoute() / currentRoute 返回的对象
  */
 export type RouteLocation = {
 	/** 页面路径（带前导斜杠，如 /pages/index/index） */

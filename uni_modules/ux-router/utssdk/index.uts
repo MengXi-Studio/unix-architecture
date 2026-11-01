@@ -1,7 +1,7 @@
 /**
  * @meng-xi/unix-router 公共入口
  *
- * 为 uni-app x 提供 vue-router 风格的路由能力（UTS 源分发）。
+ * 为 uni-app x 提供路由能力（UTS 源分发）。
  * 卖方按平台编译：web/小程序 → JS，Android → Kotlin，iOS → Swift。
  */
 export { createRouter } from './router'

@@ -1,33 +1,23 @@
 /**
- * 实例 API 实现（$-methods 的顶层函数映射；入口内联声明对外同名 API）
+ * 实例 API 顶层函数（实现层）
  *
- * UTS 无 Proxy、对象不可动态注入属性 → store.$patch/$dispose/$id
- * 无法以方法形态挂到 setup 返回的 type 对象上，统一映射为模块级顶层函数。
+ * 0.2.0 class 式架构下的职责收缩：$patch / $reset / $subscribe / $onAction / $save
+ * 已是 PiniaStoreBase 实例方法，顶层仅保留跨实例的通用操作：
+ * - dispose(store)：注销实例（≡ store.$dispose()，注册表移除）
+ * - getStoreId(store)：反查 id（≡ store.$id，未登记返回空串）
+ * （0.2.0 的顶层 patch(store, mutator) 已裁掉——reactive 架构下 $patch(partial)
+ *   与直接调用 action 等价且类型安全）
  *
- * subscribe 已裁掉（P9 裁决，2026-10-17）：deep watch 方案在 Android 端对
- * RefImpl 字段不触发（subCount=0），双端行为不一致，违背 G1。
- * 替代模式：字段级 watch(store.count, cb)（P4 已双端验证）。
+ * Kotlin 泛型擦除红线（error17）：泛型 T 进出 Map<string, any> 必须显式 as any。
  */
 import { removeStore, storeIdMap } from './registry.uts'
 
-/**
- * ≙ store.$patch(fn)：批量修改（仅 mutator 形态）
- * Pinia 的对象形态 patch(partialState) 依赖 Partial<T> 与字段反射，UTS 不可实现（差异表）
- */
-export function patchImpl<T>(store: T, fn: (s: T) => void): void {
-	fn(store)
-}
-
-/**
- * ≙ store.$dispose()：注销实例，下次 useStore() 重新执行 setup 重建
- */
+/** ≙ store.$dispose()：注销实例；已定义 id 保留，下次 useStore 重建 */
 export function disposeImpl<T>(store: T): void {
 	removeStore(store as any)
 }
 
-/**
- * ≙ store.$id：反查 store id；未登记返回空串
- */
+/** ≙ store.$id：反查 store id；未登记返回空串 */
 export function getStoreIdImpl<T>(store: T): string {
 	const id: string | null = storeIdMap.get(store as any)
 	return id != null ? id : ''

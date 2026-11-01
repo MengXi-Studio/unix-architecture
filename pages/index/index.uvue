@@ -4,7 +4,7 @@
       <AppLogo />
     </view>
     <text class="title">{{ title }}</text>
-    <text class="welcome" v-if="name.length > 0">欢迎，{{ name }}</text>
+    <text class="welcome" v-if="userStore.state.name.length > 0">欢迎，{{ userStore.state.name }}</text>
     <view class="logout-btn-box">
       <m-button type="danger" plain hairline block @click="handleLogout">退出登录</m-button>
     </view>
@@ -13,7 +13,6 @@
 
 <script setup lang="uts">
 import { useRouter } from '@/uni_modules/ux-router/utssdk/index.uts'
-import { storeToRefs } from '@/uni_modules/ux-pinia'
 import { useUserStore } from '@/stores/index.uts'
 import { showModalAsync } from '@/uni_modules/ux-utils'
 
@@ -23,7 +22,6 @@ defineUniPage({
 })
 
 const userStore = useUserStore()
-const { name } = storeToRefs(userStore)
 const router = useRouter()
 const title = ref('Hello')
 

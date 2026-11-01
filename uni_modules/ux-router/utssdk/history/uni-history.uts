@@ -1,7 +1,7 @@
 /**
  * uni-app x 页面栈历史适配
  *
- * vue-router 依赖 URL/history，而 uni-app x 以原生页面栈（getCurrentPages）为历史。
+ * Web 路由依赖 URL/history，而 uni-app x 以原生页面栈（getCurrentPages）为历史。
  * 本模块将页面栈封装为"当前历史"：支持读取当前页 path/query，并通过匹配器解析为 RouteLocation。
  * 非 uni 环境安全回退。
  */

@@ -1,6 +1,24 @@
 /**
- * api 域类型聚合出口：消费方统一从本文件导入 DTO，新增领域类型文件在此追加转发。
- * 采用具名类型转发（export type）——与 uni_modules 库入口已验证的跨端模式一致，
- * 规避 Kotlin 端对纯类型 star re-export 的未实证风险。
+ * api 域类型定义与聚合出口（DTO 唯一事实源）
+ *
+ * 归属标准：后端协议类型由 api 层权威定义，store / 页面 / 守卫统一从本文件导入；
+ * 模块私有契约（如 config 的 AppSettings / store 的 UserState）保持就近定义，不收拢至此。
+ * 还原路径说明：mx-request 的 request<T> 泛型仅为静态标注（运行时 data 为
+ * UTSJSONObject），故由 api 层经 JSON.parse<T>(JSON.stringify(data)) 官方
+ * 路径还原为本文件 DTO 后再上抛，store / 页面不接触裸 JSON。
+ *
+ * 布局约束（app-android 发行链路实测）：发行拷贝不追踪 `export type ... from`
+ * 转发链——仅被类型转发引用的子目录文件不进发行树，分析器解析转发语句即报
+ * `index not found`。故域类型统一收敛在本单文件内定义，禁止再建 types/ 子目录。
  */
-export type { LoginResult, UserInfo } from './types/api.uts'
+
+/** 登录响应（后端协议：{ token }） */
+export type LoginResult = {
+  token: string
+}
+
+/** 用户信息（后端协议：{ name, avatar }） */
+export type UserInfo = {
+  name: string
+  avatar: string
+}

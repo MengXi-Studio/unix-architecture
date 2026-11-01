@@ -13,10 +13,9 @@ description: 按本项目既定架构标准流程开发新功能或新业务模�
 - 判定交付面：新页面 / 既有页面改造 / 纯逻辑层（无 UI）。
 - 后端协议未明确时：先与用户确认字段；确需占位则按 `POST /<domain>/xxx` 风格自拟并在 api 函数注释标注「协议待确认」。
 
-## 1. DTO 类型（api/types/）
+## 1. DTO 类型（api/types.uts）
 
-- 新建 `api/types/<domain>.uts`：type 定义后端协议字段（显式类型，不加 ? 除非后端确认可缺省）。
-- 在 `api/types.uts` 追加一行具名转发：`export type { XxxResult } from './types/<domain>.uts'`。
+- 在 `api/types.uts` 内直接定义后端协议 type（显式类型，不加 ? 除非后端确认可缺省）——**禁止 types/ 子目录转发链**（app-android 发行拷贝不追踪类型转发链，见 architecture.md 第 3 节布局约束）。
 - 禁止：interface、可选字段瞎猜、把 UI 字段混进 DTO。
 
 ## 2. api 模块（api/<domain>.uts）

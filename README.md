@@ -32,9 +32,7 @@ uni-app x 的页面是编译期静态模型（多端编译到 JS / Kotlin / Swif
 │
 ├── api/                      # 接口层：薄封装（请求转发 + 路径收敛 + DTO 还原），不写业务逻辑
 │   ├── user.uts
-│   ├── types.uts             # 域类型聚合出口（具名类型转发）
-│   └── types/
-│       └── api.uts           # DTO 唯一事实源（LoginResult / UserInfo）
+│   └── types.uts             # DTO 唯一事实源（LoginResult / UserInfo，单文件即聚合出口）
 │
 ├── stores/                   # 状态层：ux-pinia class 式 store，免挂载（模块级注册表即全局单例）
 │   ├── index.uts             # useXxxStore 出口
@@ -44,9 +42,7 @@ uni-app x 的页面是编译期静态模型（多端编译到 JS / Kotlin / Swif
 │
 ├── composables/              # 组合式函数：函数无出口（按需直接导入），类型走聚合出口
 │   ├── useLoading.uts
-│   ├── types.uts
-│   └── types/
-│       └── useLoading.uts    # LoadingState 定义
+│   └── types.uts             # LoadingState 定义（域类型单文件收敛）
 │
 ├── components/               # easycom 约定目录（components/<Name>/<Name>.uvue，免注册使用）
 │   └── AppLogo/AppLogo.uvue
@@ -120,13 +116,13 @@ await ensureAuthReady()           // 异步守卫（ux-router 守卫链支持 aw
 
 | 类型性质 | 位置 | 实例 |
 | --- | --- | --- |
-| 跨层共享（api → store → 页面/守卫） | `<域>/types/` + `<域>/types.uts` 聚合出口 | `LoginResult` / `UserInfo` |
-| 多文件域的出口形状 | 同上 | `UserStore` / `LoadingState` |
-| 单文件模块私有契约 | 就近定义 | `AppSettings`（config 头注释已记录判据） |
+| 跨层共享（api → store → 页面/守卫） | `<域>/types.uts` 单文件定义 | `LoginResult` / `UserInfo` / `LoadingState` |
+| store 出口形状 | `stores/modules/*.uts` class 声明，`stores/types.uts` 转发 | `UserStore` |
+| 单文件模块私有契约 | 就近定义 | `AppSettings`（config）、`UserState`（store 模块） |
 | 第三方库类型 | `import type` 导入，绝不复制 | `RequestConfig` / `ResponseResult` / `Ref` |
 
-- 聚合出口一律**具名类型转发**（`export type { X } from`），不用 star re-export（Kotlin 端未实证）。
-- 消费方统一从 `<域>/types.uts` 导入，新增类型文件时在出口追加一行转发。
+- **布局约束（app-android 发行链路实测）**：发行拷贝不追踪 `export type ... from` 转发链——仅被类型转发引用的子目录文件不进发行树，分析器解析转发语句即报 `index not found`。故域类型收敛在 `<域>/types.uts` 单文件内定义，**禁止 types/ 子目录转发链**；转发仅允许指向运行时可达文件（如 stores/types.uts → modules）。
+- 消费方统一从 `<域>/types.uts` 导入类型。
 - api 层负责 DTO 还原，且**逐调用点内联** `JSON.parse<T>(...)`（具体类型）——勿提取公共泛型包装，二次泛型传递在 Kotlin 端触发泛型擦除。
 
 ## 5. 各域细则

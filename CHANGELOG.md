@@ -14,6 +14,11 @@
 - **页面消费替换**：登录页提交按钮替换为 `m-button`（primary + block，`:loading` 绑定 `useLoading` 加载态，加载中自动阻断点击并切换 `loading-text`）；首页退出登录替换为 `m-button`（`danger + plain + hairline` 语义形态）；页面间距按样式隔离规约经外层 view 控制。
 - **ux-router 0.8.2 `backFallback` 接入**（`router/index.uts`）：back() 页面栈不足时兜底 relaunch 回首页——本工程路由表无 `meta.isTab` 路由，深链 / 刷新直连后的返回由 CANCELLED 失败转为走完整守卫链的兜底跳转。
 
+### Fixed
+
+- **发行打包修复**（`uni_modules/ux-storage` / `ux-utils` / `mx-request`）：HBuilderX 5.34 发行流水线的 uts-proxy 对插件入口**导出的字符串常量**生成非法 JS（`genInitCode` 输出未加引号的字符串字面量，如 `= mx_storage:`，esbuild 于 13:44 报 `Expected a semicolon`；dev 模式不触发）。三个插件入口共 9 个无消费方的字符串常量暂去导出（内部 BUILTIN_ 孪生常量不受影响），全部插件 proxy 经 esbuild（js loader）解析验证通过；上游 unix-storage / unix-utils / unix-request 仓库需同步规避。
+- **发行树类型文件修复**（app-android）：发行拷贝不追踪 `export type ... from` 转发链——`api/types/` 与 `composables/types/` 子目录文件不进发行树，分析器解析转发语句报 `index not found`。DTO（`LoginResult` / `UserInfo`）与 `LoadingState` 收敛进 `api/types.uts` / `composables/types.uts` 单文件（与 stores 域模式对齐），架构类型约定同步更新（禁 types/ 子目录转发链，转发仅允许指向运行时可达文件）。
+
 ### Verified
 
 - Web 端（HBuilderX 5.34 / VDOM / vapor）登录闭环 E2E 实测：冷启动守卫重定向 → 登录（m-button）→ `[unix-pinia] store 'user' 已创建`（class 实例化正常）→ GET /user/info 200（Bearer 注入正常）→ 首页「欢迎，梦曦用户」reactive 渲染 → 退出确认 modal → 清理登录态回登录页；控制台无错误。token 持久化经评审维持 `utils/auth.uts` 现状（不迁移内置持久化插件，判据存档于任务文档 Q1）。

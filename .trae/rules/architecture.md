@@ -44,12 +44,12 @@
 
 | 类型性质 | 位置 |
 | --- | --- |
-| 跨层共享（api → store → 页面/守卫） | `<域>/types/<file>.uts` + `<域>/types.uts` 聚合出口 |
+| 跨层共享（api → store → 页面/守卫） | `<域>/types.uts` 单文件定义（如 DTO / LoadingState） |
 | 域出口形状（如 store 的 class 类型） | `<域>/types.uts` 具名转发 class 类型（ux-pinia 0.2.0 class 式：出口形状由 class 声明固化，state 契约就近定义） |
 | 单文件模块私有契约 | 就近定义（如 config 的 AppSettings、store 的 XxxState） |
 | 第三方库类型 | `import type` 导入，**绝不复制**进项目 |
 
-- 聚合出口一律**具名类型转发**：`export type { X } from './types/xxx.uts'`。
+- **布局约束（app-android 发行链路实测）**：发行拷贝不追踪 `export type ... from` 转发链——仅被类型转发引用的子目录文件不进发行树（`index not found`），**禁止 types/ 子目录转发链**；转发仅允许指向运行时可达文件（如 stores/types.uts → modules）。
 - **禁止** `export * from`、禁止经转发链导出值（函数/常量）——Kotlin 端未实证/已证伪。
 - 消费方统一从 `<域>/types.uts` 导入类型。
 

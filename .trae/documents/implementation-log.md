@@ -7,4 +7,5 @@
 - [YYYY-MM-DD] [任务文档](相对链接) — <一句话结果；遗留 TODO 数>
 -->
 
+- [2026-11-01] [uts插件-发行打包proxy修复](修复/2026-11-01/uts插件-发行打包proxy修复.md) — 5.34 打包流水线对入口导出字符串常量生成非法 JS，9 个无消费方常量去导出，5 插件 proxy esbuild 验证通过；遗留 TODO 无（上游仓库需同步）
 - [2026-11-01] [stores-ux-pinia迁移](优化/2026-11-01/stores-ux-pinia迁移.md) — ux-pinia 0.2.0 破坏性迁移（store class 化）+ ux-router 0.8.2 backFallback 接入，E2E 登录闭环验证通过；遗留 TODO 无

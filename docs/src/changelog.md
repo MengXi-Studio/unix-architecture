@@ -22,6 +22,7 @@
 ### Verified
 
 - Web 端登录闭环 E2E；Android 云打包编译通过（Kotlin 链路）。
+- Android 云打包产物（APK）：`__UNI__FDA7014`——<https://mp-b8b8347a-48e9-434d-8302-3e9d99c2cb01.cdn.bspapp.com/cloudstorage/app-build-pkg/1793535799767-__UNI__FDA7014_1793535789282.apk>（uniCloud 云存储直链，有时效性，过期请在 HBuilderX 重新云打包）。
 
 ## [1.0.0] - 2026-10-21
 

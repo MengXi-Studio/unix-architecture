@@ -22,6 +22,7 @@ This page stays in sync with the root [CHANGELOG.md](https://github.com/MengXi-S
 ### Verified
 
 - Web login loop E2E; Android cloud-packaging compilation passed (Kotlin pipeline).
+- Android cloud-packaging artifact (APK): `__UNI__FDA7014` — <https://mp-b8b8347a-48e9-434d-8302-3e9d99c2cb01.cdn.bspapp.com/cloudstorage/app-build-pkg/1793535799767-__UNI__FDA7014_1793535789282.apk> (direct uniCloud storage link, time-limited; if expired, re-package via HBuilderX cloud packaging).
 
 ## [1.0.0] - 2026-10-21
 

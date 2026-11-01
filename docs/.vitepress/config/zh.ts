@@ -46,8 +46,12 @@ export const zhConfig: LocaleSpecificConfig<DefaultTheme.Config> = {
 				text: '相关链接',
 				items: [
 					{ text: 'GitHub 仓库', link: 'https://github.com/MengXi-Studio/unix-architecture' },
-					{ text: 'm-ui-x 文档', link: 'https://mengxi-studio.github.io/unix-ui/' },
-					{ text: 'unix-pinia 文档', link: 'https://mengxi-studio.github.io/unix-pinia/' }
+					{ text: 'ux-router 文档', link: 'https://mengxi-studio.github.io/unix-router/' },
+					{ text: 'ux-pinia 文档', link: 'https://mengxi-studio.github.io/unix-pinia/' },
+					{ text: 'mx-request 文档', link: 'https://mengxi-studio.github.io/unix-request/' },
+					{ text: 'ux-storage 文档', link: 'https://mengxi-studio.github.io/unix-storage/' },
+					{ text: 'ux-utils 文档', link: 'https://mengxi-studio.github.io/unix-utils/' },
+					{ text: 'm-ui-x 文档', link: 'https://mengxi-studio.github.io/unix-ui/' }
 				]
 			}
 		],

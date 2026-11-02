@@ -1,0 +1,181 @@
+/**
+ * PiniaStoreBase：class 式 store 基类（0.2.0 架构）
+ *
+ * 为什么是 class + reactive（架构定稿）：
+ * - UTS 无 Proxy、无反射：setup 式 + Ref 形态下 $patch/$subscribe/$onAction/$reset
+ *   均不可实现（P 系列裁决）；且 HBuilderX 5.34 编译器对 UTS 插件内运行时类 vue 符号
+ *   （Ref/ref/watch/effectScope）的 Kotlin import 生成失效（Unresolved）
+ * - reactive<T> 是**编译期展开**（生成 ReactiveObject 属性代理，内联依赖追踪），
+ *   5.34 下 Kotlin 生成正常（PoC 实证）——class + reactive 是全 API 面的唯一可行路径
+ *
+ * Template Method 模式（UTS reactive 返回 TReactiveObject 强类型 class，无法 cast
+ * UTSJSONObject，框架无法反射遍历字段）：$reset / $patch / 持久化 / $subscribe 分发
+ * 均由「使用者按需重写的三个钩子」驱动：
+ * - _doReset()：定义 $reset 行为
+ * - _hydrate(data)：把 UTSJSONObject 装载到 state（$patch 与持久化恢复共用）
+ * - _serialize()：把 state 转 UTSJSONObject（$subscribe 分发与持久化保存共用）
+ * 三个钩子均可不重写——state 修改 / actions / $subscribe（$patch/$reset 触发）依然有效。
+ *
+ * effectScope 说明：HBuilderX 5.34 下 utssdk 内 effectScope 被生成器静默丢弃（PoC 实证），
+ * 故本基类不使用 effectScope——**getter（class get 属性）替代 computed 字段**（无 effect
+ * 生命周期问题，模板渲染时经 reactive 属性依赖收集自动更新）。
+ */
+import type { Unsubscribe } from '../interface.uts'
+
+/** $subscribe 回调：type = 'patch' | 'reset' | 'save'；state = _serialize() 快照 */
+export type StateChangeCallback = (type: string, state: UTSJSONObject) => void
+
+/** $onAction 回调：info = { name: string }（经 callAction 包装的 action 才被追踪） */
+export type ActionInfo = {
+	name: string
+}
+
+export type ActionChangeCallback = (info: ActionInfo) => void
+
+export class PiniaStoreBase {
+	/** store id（由 defineStore 在实例创建时注入） */
+	$id: string = ''
+	/**
+	 * 当前 state 引用（bindState 时与子类 state 字段同引用）。
+	 * 可空红线：UTS 的 any 生成 Kotlin 非空 Any，未绑定前为 null 必须声明 any | null
+	 * （5.34 云打包实证：`$state: any = null` 生成 `Any = null` 编译报错）。
+	 */
+	$state: any | null = null
+
+	private _stateSubscribers: Array<StateChangeCallback> = []
+	private _actionSubscribers: Array<ActionChangeCallback> = []
+
+	/**
+	 * 绑定响应式 state（子类 constructor 中 super() 之后调用一次）。
+	 * 未调用时 $reset / $patch / $subscribe / 持久化均不可用（$state 为 null）。
+	 */
+	bindState(state: any): void {
+		this.$state = state
+	}
+
+	/* ============ 实例 API（$-methods） ============ */
+
+	/**
+	 * ≙ store.$reset()：调用子类 _doReset() 后通知订阅器（type = 'reset'）。
+	 * 未重写 _doReset 时为空操作（仅通知）。
+	 */
+	$reset(): void {
+		this._doReset()
+		this._notifyState('reset')
+	}
+
+	/**
+	 * ≙ store.$patch(partial)：调用子类 _hydrate(partial) 装载局部数据后通知订阅器
+	 * （type = 'patch'）。未重写 _hydrate 时为空操作（仅通知）。
+	 */
+	$patch(partial: UTSJSONObject): void {
+		this._hydrate(partial)
+		this._notifyState('patch')
+	}
+
+	/**
+	 * 显式保存点：通知订阅器（type = 'save'）。
+	 * 持久化插件经 $subscribe 落盘——direct 修改 reactive 字段不会自动触发
+	 * （UTS 无全局订阅钩子），需要在关键操作后落盘时调用本方法。
+	 */
+	$save(): void {
+		this._notifyState('save')
+	}
+
+	/**
+	 * 订阅状态变更（$patch / $reset / $save 触发；cb 收到 _serialize() 快照）。
+	 * 返回取消订阅函数。
+	 */
+	$subscribe(cb: StateChangeCallback): Unsubscribe {
+		this._stateSubscribers.push(cb)
+		return (): void => {
+			const i = this._stateSubscribers.indexOf(cb)
+			if (i >= 0) {
+				this._stateSubscribers.splice(i, 1)
+			}
+		}
+	}
+
+	/**
+	 * 订阅 action 调用（仅经 callAction / callActionWithArgs 包装的 action 被追踪）。
+	 * 返回取消订阅函数。
+	 */
+	$onAction(cb: ActionChangeCallback): Unsubscribe {
+		this._actionSubscribers.push(cb)
+		return (): void => {
+			const i = this._actionSubscribers.indexOf(cb)
+			if (i >= 0) {
+				this._actionSubscribers.splice(i, 1)
+			}
+		}
+	}
+
+	/**
+	 * ≙ store.$dispose()：销毁实例（注册表移除由 defineStore 注入的钩子完成）。
+	 * dispose 后既有引用指向孤儿实例，重新 useStore() 重建。
+	 */
+	$dispose(): void {
+		if (this._disposeHook != null) {
+			this._disposeHook!()
+		}
+	}
+
+	/** dispose 钩子（defineStore 注入：注册表移除），外部不可见 */
+	private _disposeHook: (() => void) | null = null
+
+	/* ============ 子类钩子（Template Method，按需重写） ============ */
+
+	/** 定义 $reset 行为（默认空实现） */
+	_doReset(): void {}
+
+	/** 把 UTSJSONObject 装载到 state（$patch 与持久化恢复共用；默认空实现） */
+	_hydrate(data: UTSJSONObject): void {}
+
+	/** 把 state 转 UTSJSONObject（$subscribe 分发与持久化保存共用；默认空对象） */
+	_serialize(): UTSJSONObject {
+		return {} as UTSJSONObject
+	}
+
+	/* ============ 子类工具（protected 语义，供 action 追踪） ============ */
+
+	/**
+	 * 让某个 action 触发 $onAction 订阅（普通 method 不被追踪）。
+	 * 用法：this.callAction('name', (): any => { ...; return null })
+	 */
+	callAction(name: string, fn: () => any): any | null {
+		this._notifyAction(name)
+		return fn()
+	}
+
+	/** 同 callAction，但额外把参数列表上报给订阅器 */
+	callActionWithArgs(name: string, fn: () => any, args: Array<any>): any | null {
+		this._notifyAction(name)
+		return fn()
+	}
+
+	/* ============ 内部实现 ============ */
+
+	private _notifyState(type: string): void {
+		const snapshot = this._serialize()
+		for (let i = 0; i < this._stateSubscribers.length; i++) {
+			this._stateSubscribers[i](type, snapshot)
+		}
+	}
+
+	private _notifyAction(name: string): void {
+		const info: ActionInfo = { name: name }
+		for (let i = 0; i < this._actionSubscribers.length; i++) {
+			this._actionSubscribers[i](info)
+		}
+	}
+
+	/** 供 defineStore 注册 dispose 钩子（模块内协作，不对使用者暴露） */
+	markDisposeHook(hook: () => void): void {
+		this._disposeHook = hook
+	}
+
+	/** 供 defineStore / 持久化插件判断 state 是否已绑定 */
+	hasBoundState(): boolean {
+		return this.$state != null
+	}
+}

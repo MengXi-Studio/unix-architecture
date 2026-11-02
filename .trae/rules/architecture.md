@@ -19,12 +19,13 @@
 | 插件 | 职责 | 导入路径 | 常用 API |
 | --- | --- | --- | --- |
 | ux-router | 路由 / 守卫 / 组合式 | `@/uni_modules/ux-router/utssdk/index.uts`（注意带 utssdk 后缀） | `useRouter` / `useRoute` / `queryInt` / `queryBool` |
-| ux-pinia | 状态管理（免挂载） | `@/uni_modules/ux-pinia` | `defineStore` / `storeToRefs` |
+| ux-pinia | 状态管理（class 式，免挂载） | `@/uni_modules/ux-pinia` | `defineStore` / `PiniaStoreBase` / `createPersistPlugin`（`reactive` 自 vue 导入；`storeToRefs` 已于 0.2.0 移除） |
 | mx-request | 网络请求 | `@/uni_modules/mx-request` | `request` / `configureRequest` / `useRequestInterceptor` / `useResponseInterceptor` |
 | ux-storage | 持久化（异步） | `@/uni_modules/ux-storage` | `set` / `get` / `remove` / `createStorage` |
 | ux-utils | toast / modal（全端自绘） | `@/uni_modules/ux-utils` | `showToast` / `showToastAsync` / `showModalAsync` / `showModalAlert` |
+| m-ui-x | UI 组件库（11 个基础组件） | **无需导入**（easycom，`<m-button>` 等标签即用） | `m-button` / `m-cell` / `m-cell-group` / `m-row` / `m-col` / `m-icon` / `m-image` / `m-text` / `m-space` / `m-loading` / `m-badge` |
 
-> 目录名与 npm 包名不同（如 `ux-utils` ↔ `@meng-xi/unix-utils`），一律以上表路径为准。
+> 目录名与 npm 包名不同（如 `ux-utils` ↔ `@meng-xi/unix-utils`、`m-ui-x` ↔ `@meng-xi/unix-ui`），一律以上表路径为准。
 
 ## 2. 新增业务功能的标准落码顺序
 
@@ -43,12 +44,12 @@
 
 | 类型性质 | 位置 |
 | --- | --- |
-| 跨层共享（api → store → 页面/守卫） | `<域>/types/<file>.uts` + `<域>/types.uts` 聚合出口 |
-| 多文件域的出口形状（如 Store 类型） | 同上 |
-| 单文件模块私有契约 | 就近定义（如 config 的 AppSettings） |
+| 跨层共享（api → store → 页面/守卫） | `<域>/types.uts` 单文件定义（如 DTO / LoadingState） |
+| 域出口形状（如 store 的 class 类型） | `<域>/types.uts` 具名转发 class 类型（ux-pinia 0.2.0 class 式：出口形状由 class 声明固化，state 契约就近定义） |
+| 单文件模块私有契约 | 就近定义（如 config 的 AppSettings、store 的 XxxState） |
 | 第三方库类型 | `import type` 导入，**绝不复制**进项目 |
 
-- 聚合出口一律**具名类型转发**：`export type { X } from './types/xxx.uts'`。
+- **布局约束（app-android 发行链路实测）**：发行拷贝不追踪 `export type ... from` 转发链——仅被类型转发引用的子目录文件不进发行树（`index not found`），**禁止 types/ 子目录转发链**；转发仅允许指向运行时可达文件（如 stores/types.uts → modules）。
 - **禁止** `export * from`、禁止经转发链导出值（函数/常量）——Kotlin 端未实证/已证伪。
 - 消费方统一从 `<域>/types.uts` 导入类型。
 
@@ -69,6 +70,7 @@
 - 持久化：token 一律经 `utils/auth.uts`；其它业务数据直接用 ux-storage 顶层 `set` / `get` / `remove`（key 加业务前缀，如 `order:draft`）；**禁用** `uni.setStorageSync` 系。
 - toast / modal 一律用 ux-utils：`showToast` / `showToastAsync` / `showModalAsync` / `showModalAlert`；**禁用** `uni.showToast` / `uni.showModal`。
 - 组件走 easycom 约定：`components/<Name>/<Name>.uvue`，页面免 import 直接使用；组件内只管自身样式，页面间距经外层 view 控制（规避样式隔离）。
+- 第三方 UI 一律用 `uni_modules/m-ui-x`：easycom 零注册，**新增 UI 优先复用其现成组件**，不自绘重复轮子；主题定制只在根 `uni.scss` 直接定义 `$m-*` 变量（编译期覆盖），**禁止** `@import` 其 `theme/vars.scss`——uni.scss 会注入全组件样式，与组件内引用同一文件触发 sass 循环导入。
 - 样式：仅 class 选择器 + flex 布局；文字样式只设在 text/button 上；不用 scoped、不用 rpx（除非随屏宽变化场景）。
 - 组合式函数放 `composables/`（`useXxx.uts` 命名），函数直接导入；State 类型进 `composables/types/`。
 

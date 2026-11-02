@@ -1,4 +1,19 @@
+## 0.8.2 (2026-11-01)
+### 新增
+
+- **`RouterOptions.backFallback`**：返回栈底兜底目标（路径或命名路由）。`back()` 页面栈不足时自动 `relaunch` 到该页（走完整守卫链），覆盖无 tabBar 页工程（如 `navigationStyle: custom` 自绘导航的应用）；未配置时自动取首个 `meta.isTab` 路由，显式配置优先级高于 isTab 自动推断
+## 0.8.1（2026-10-29）
+
+### 修复
+
+- **Android 云打包 Kotlin 编译错误（Return type mismatch）**：非 async 函数裸 `return` 内部 `Promise<never>`（`failNavigation`）生成的 `UTSPromise<Any?>` 与函数声明的 `UTSPromise<RouteLocation>` 不匹配；相关函数 async 化修复（`backWithStackFallback`）
+- **H5 刷新 / 冷启动直连非首页后返回无效**：H5 导航栏返回箭头在页面栈仅 1 层时框架实际调用
+  `uni.reLaunch({ url: '/' })`，此前该调用被 InterceptorPlugin 拦截后因根路径无有效页面被静默丢弃，同时原始调用被阻止，导致返回无任何反应；现根路径 `reLaunch` 转交入口页兜底（`relaunch` 首个 `meta.isTab`
+  路由，走完整守卫链）
+- **`back()` 页面栈不足兜底**：栈长 < 2 或 `delta >= 栈长` 时，由 reject `CANCELLED` 改为自动 `relaunch` 到首个 `meta.isTab` 路由（解决 App 端冷启动深链后返回无处可退）；路由表无 tabBar 路由时维持 `CANCELLED`
+
 ## 0.8.0（2026-09-27）
+
 ### 新增
 
 - **基于文件的路由生成插件**（构建期 dev 工具，随路由库同包分发）：
@@ -27,6 +42,7 @@
   归一化后判断
 - **App 端导航动画透传缺失**：`AnimationPlugin` 此前 App 端实际未透传动画参数，现 `uni.navigateTo` / `uni.navigateBack` 具名 Options 携带 `animationType` / `animationDuration`（官方类型声明标注**仅 App 支持**：Android
   4.18+ / iOS 4.25+ / HarmonyOS 4.61+）；小程序端官方不支持动画字段，`redirectTo` / `reLaunch` / `switchTab` 官方 Options 无动画字段，均不携带
+
 ## 0.7.0（2026-09-20）
 
 ### 变更（破坏性）

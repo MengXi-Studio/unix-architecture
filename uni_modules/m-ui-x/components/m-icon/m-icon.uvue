@@ -1,0 +1,110 @@
+<template>
+	<!-- 字体图标：单 text 根节点（官方 uni-icons 同构），unicode 直显；icon 插槽可替换默认字形 -->
+	<text v-if="codepoint != ''" :class="rootClass" :style="rootStyle" @click="onClick">
+		<slot name="icon">{{ codepoint }}</slot>
+	</text>
+</template>
+
+<script setup lang="uts">
+	import { iconCodepoints, IconName } from './icons.uts'
+
+	type Props = {
+		/** 图标名称（IconName 联合类型，IDE 自动提示全部图标名，写错编译期报错） */
+		name: IconName
+		/** 图标颜色：支持 CSS 色值（#hex 等）；为空时继承父级文字颜色（标签样式直达） */
+		color?: string
+		/** 图标大小：纯数字自动补 px；为空时继承父级字号（标签样式直达） */
+		size?: string
+		/** 自定义根节点类名（可覆盖 font-family 接入自有字体图标，必要时配合 !important） */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		color: '',
+		size: '',
+		customClass: '',
+		customStyle: ''
+	})
+
+	const emit = defineEmits(['click'])
+
+	/** 图标码点：查映射表；未命中返回空串（组件不渲染节点） */
+	const codepoint = computed<string>(() => {
+		const cp = iconCodepoints.get(props.name)
+		return cp == null ? '' : cp
+	})
+
+	/** 根节点类名：基础类 + 自定义类名拼接 */
+	const rootClass = computed<string>(() => {
+		let cls = 'm-icon'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/**
+	 * 数字或纯数字字符串补 px 单位（如 "24" → "24px"），带单位字符串原样返回
+	 */
+	function addUnit(value: string): string {
+		if (value == '') return ''
+		const pattern = new RegExp('^-?\\d+(\\.\\d+)?$')
+		return pattern.test(value) ? value + 'px' : value
+	}
+
+	/** 根节点动态样式：customStyle 补分号后拼接；color / size 非空时写 inline（为空则继承父级样式） */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		if (props.color != '') style += 'color: ' + props.color + ';'
+		if (props.size != '') style += 'font-size: ' + addUnit(props.size) + ';'
+		return style
+	})
+
+	/**
+	 * 点击事件透传：向父组件派发原生 click 事件
+	 */
+	function onClick(e: MouseEvent) {
+		emit('click', e)
+	}
+
+	// 无效图标名告警：联合类型已拦截绝大多数错误，此处兜底动态 string 强转等运行时场景
+	watch(
+		() => props.name,
+		(name: IconName) => {
+			if (iconCodepoints.get(name) == null) {
+				console.warn('[m-icon] 无效的图标名：' + name)
+			}
+		},
+		{ immediate: true }
+	)
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss，
+	 * uni.scss 注入机制与组件内引入同一文件会触发循环导入）。
+	 */
+	@import '../../theme/vars.scss';
+
+	/*
+	 * 字体声明：ttf 随包内置（packages/core/static/m-icon.ttf → sync 后位于
+	 * uni_modules/m-ui-x/static/，官方支持的本地字体路径），零配置、离线可用。
+	 * 自定义图标出口：custom-class 覆盖根节点 font-family（配合自有字体与码点），
+	 * 或 icon 插槽放置任意内容。
+	 */
+	@font-face {
+		font-family: m-icon;
+		src: url('/uni_modules/m-ui-x/static/m-icon.ttf');
+	}
+
+	/* ========== 根节点（text，行内收缩） ========== */
+	.m-icon {
+		font-family: m-icon;
+		font-style: normal;
+		font-weight: normal;
+		line-height: 1;
+	}
+</style>

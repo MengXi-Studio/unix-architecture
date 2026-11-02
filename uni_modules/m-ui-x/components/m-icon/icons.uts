@@ -1,0 +1,591 @@
+/**
+ * m-icon 图标数据表
+ *
+ * 注意：本文件为脚本生成物，禁止手改。
+ * 数据来源：内置图标集（iconfont 项目，257 个图标名 + 码点）
+ * 分组：basic（10）/ outline（139）/ filled（108）
+ */
+/** 全部图标名的字符串联合类型，IDE 自动提示、写错编译期报错 */
+export type IconName =
+  | 'arrow'
+  | 'arrow-left'
+  | 'arrow-up'
+  | 'arrow-down'
+  | 'success'
+  | 'cross'
+  | 'plus'
+  | 'minus'
+  | 'fail'
+  | 'circle'
+  | 'location-o'
+  | 'like-o'
+  | 'star-o'
+  | 'phone-o'
+  | 'setting-o'
+  | 'fire-o'
+  | 'coupon-o'
+  | 'cart-o'
+  | 'shopping-cart-o'
+  | 'cart-circle-o'
+  | 'friends-o'
+  | 'comment-o'
+  | 'gem-o'
+  | 'gift-o'
+  | 'point-gift-o'
+  | 'send-gift-o'
+  | 'service-o'
+  | 'bag-o'
+  | 'todo-list-o'
+  | 'balance-list-o'
+  | 'close'
+  | 'clock-o'
+  | 'question-o'
+  | 'passed'
+  | 'add-o'
+  | 'gold-coin-o'
+  | 'info-o'
+  | 'play-circle-o'
+  | 'pause-circle-o'
+  | 'stop-circle-o'
+  | 'warning-o'
+  | 'phone-circle-o'
+  | 'music-o'
+  | 'smile-o'
+  | 'thumb-circle-o'
+  | 'comment-circle-o'
+  | 'browsing-history-o'
+  | 'underway-o'
+  | 'more-o'
+  | 'video-o'
+  | 'shop-o'
+  | 'shop-collect-o'
+  | 'share-o'
+  | 'chat-o'
+  | 'smile-comment-o'
+  | 'vip-card-o'
+  | 'award-o'
+  | 'diamond-o'
+  | 'volume-o'
+  | 'cluster-o'
+  | 'wap-home-o'
+  | 'photo-o'
+  | 'gift-card-o'
+  | 'expand-o'
+  | 'medal-o'
+  | 'good-job-o'
+  | 'manager-o'
+  | 'label-o'
+  | 'bookmark-o'
+  | 'bill-o'
+  | 'hot-o'
+  | 'hot-sale-o'
+  | 'new-o'
+  | 'new-arrival-o'
+  | 'goods-collect-o'
+  | 'eye-o'
+  | 'delete-o'
+  | 'font-o'
+  | 'contact-o'
+  | 'notes-o'
+  | 'records-o'
+  | 'cash-back-record-o'
+  | 'newspaper-o'
+  | 'discount-o'
+  | 'completed-o'
+  | 'user-o'
+  | 'description-o'
+  | 'balance-o'
+  | 'refund-o'
+  | 'birthday-cake-o'
+  | 'orders-o'
+  | 'tv-o'
+  | 'envelop-o'
+  | 'flag-o'
+  | 'flower-o'
+  | 'filter-o'
+  | 'bar-chart-o'
+  | 'chart-trending-o'
+  | 'brush-o'
+  | 'bullhorn-o'
+  | 'hotel-o'
+  | 'cashier-o'
+  | 'warn-o'
+  | 'calendar-o'
+  | 'bulb-o'
+  | 'user-circle-o'
+  | 'desktop-o'
+  | 'apps-o'
+  | 'home-o'
+  | 'back-top'
+  | 'search'
+  | 'points'
+  | 'edit'
+  | 'qr'
+  | 'qr-invalid'
+  | 'closed-eye'
+  | 'down'
+  | 'scan'
+  | 'revoke'
+  | 'free-postage'
+  | 'certificate'
+  | 'logistics'
+  | 'after-sale'
+  | 'exchange'
+  | 'upgrade'
+  | 'ellipsis'
+  | 'sign'
+  | 'failure'
+  | 'ecard-pay'
+  | 'peer-pay'
+  | 'balance-pay'
+  | 'credit-pay'
+  | 'debit-pay'
+  | 'cash-on-deliver'
+  | 'other-pay'
+  | 'tosend'
+  | 'pending-payment'
+  | 'paid'
+  | 'aim'
+  | 'idcard'
+  | 'replay'
+  | 'shrink'
+  | 'shield-o'
+  | 'guide-o'
+  | 'cash-o'
+  | 'link-o'
+  | 'miniprogram-o'
+  | 'list-switch'
+  | 'list-switching'
+  | 'location'
+  | 'like'
+  | 'star'
+  | 'phone'
+  | 'setting'
+  | 'fire'
+  | 'coupon'
+  | 'cart'
+  | 'shopping-cart'
+  | 'cart-circle'
+  | 'friends'
+  | 'comment'
+  | 'gem'
+  | 'gift'
+  | 'point-gift'
+  | 'send-gift'
+  | 'service'
+  | 'bag'
+  | 'todo-list'
+  | 'balance-list'
+  | 'clear'
+  | 'clock'
+  | 'question'
+  | 'checked'
+  | 'add'
+  | 'gold-coin'
+  | 'info'
+  | 'play-circle'
+  | 'pause-circle'
+  | 'stop-circle'
+  | 'warning'
+  | 'phone-circle'
+  | 'music'
+  | 'smile'
+  | 'thumb-circle'
+  | 'comment-circle'
+  | 'browsing-history'
+  | 'underway'
+  | 'more'
+  | 'video'
+  | 'shop'
+  | 'shop-collect'
+  | 'share'
+  | 'chat'
+  | 'smile-comment'
+  | 'vip-card'
+  | 'award'
+  | 'diamond'
+  | 'volume'
+  | 'cluster'
+  | 'wap-home'
+  | 'photo'
+  | 'gift-card'
+  | 'expand'
+  | 'medal'
+  | 'good-job'
+  | 'manager'
+  | 'label'
+  | 'bookmark'
+  | 'bill'
+  | 'hot'
+  | 'hot-sale'
+  | 'new'
+  | 'new-arrival'
+  | 'goods-collect'
+  | 'eye'
+  | 'delete'
+  | 'font'
+  | 'contact'
+  | 'notes'
+  | 'records'
+  | 'cash-back-record'
+  | 'newspaper'
+  | 'discount'
+  | 'completed'
+  | 'user'
+  | 'description'
+  | 'wechat'
+  | 'wechat-pay'
+  | 'wechat-moments'
+  | 'qq'
+  | 'alipay'
+  | 'weibo'
+  | 'photograph'
+  | 'youzan-shield'
+  | 'umbrella-circle'
+  | 'bell'
+  | 'printer'
+  | 'map-marked'
+  | 'card'
+  | 'add-square'
+  | 'live'
+  | 'lock'
+  | 'audio'
+  | 'graphic'
+  | 'column'
+  | 'invitation'
+  | 'play'
+  | 'pause'
+  | 'stop'
+  | 'weapp-nav'
+  | 'ascending'
+  | 'descending'
+  | 'bars'
+  | 'wap-nav'
+  | 'enlarge'
+  | 'photo-fail'
+  | 'sort'
+
+/** 图标名到 unicode 码点的映射表 */
+export const iconCodepoints: Map<string, string> = new Map()
+iconCodepoints.set('arrow', '\ue660')
+iconCodepoints.set('arrow-left', '\ue668')
+iconCodepoints.set('arrow-up', '\ue65f')
+iconCodepoints.set('arrow-down', '\ue65e')
+iconCodepoints.set('success', '\ue728')
+iconCodepoints.set('cross', '\ue6a7')
+iconCodepoints.set('plus', '\ue6fa')
+iconCodepoints.set('minus', '\ue6ee')
+iconCodepoints.set('fail', '\ue6b7')
+iconCodepoints.set('circle', '\ue692')
+iconCodepoints.set('location-o', '\ue6d9')
+iconCodepoints.set('like-o', '\ue6d7')
+iconCodepoints.set('star-o', '\ue722')
+iconCodepoints.set('phone-o', '\ue6fc')
+iconCodepoints.set('setting-o', '\ue745')
+iconCodepoints.set('fire-o', '\ue6b9')
+iconCodepoints.set('coupon-o', '\ue69e')
+iconCodepoints.set('cart-o', '\ue681')
+iconCodepoints.set('shopping-cart-o', '\ue71f')
+iconCodepoints.set('cart-circle-o', '\ue683')
+iconCodepoints.set('friends-o', '\ue6c2')
+iconCodepoints.set('comment-o', '\ue698')
+iconCodepoints.set('gem-o', '\ue6bd')
+iconCodepoints.set('gift-o', '\ue6c7')
+iconCodepoints.set('point-gift-o', '\ue704')
+iconCodepoints.set('send-gift-o', '\ue715')
+iconCodepoints.set('service-o', '\ue712')
+iconCodepoints.set('bag-o', '\ue66b')
+iconCodepoints.set('todo-list-o', '\ue733')
+iconCodepoints.set('balance-list-o', '\ue673')
+iconCodepoints.set('close', '\ue690')
+iconCodepoints.set('clock-o', '\ue68f')
+iconCodepoints.set('question-o', '\ue70b')
+iconCodepoints.set('passed', '\ue6f9')
+iconCodepoints.set('add-o', '\ue662')
+iconCodepoints.set('gold-coin-o', '\ue6c4')
+iconCodepoints.set('info-o', '\ue6d1')
+iconCodepoints.set('play-circle-o', '\ue706')
+iconCodepoints.set('pause-circle-o', '\ue6f6')
+iconCodepoints.set('stop-circle-o', '\ue725')
+iconCodepoints.set('warning-o', '\ue743')
+iconCodepoints.set('phone-circle-o', '\ue6fb')
+iconCodepoints.set('music-o', '\ue6e6')
+iconCodepoints.set('smile-o', '\ue726')
+iconCodepoints.set('thumb-circle-o', '\ue72e')
+iconCodepoints.set('comment-circle-o', '\ue695')
+iconCodepoints.set('browsing-history-o', '\ue678')
+iconCodepoints.set('underway-o', '\ue735')
+iconCodepoints.set('more-o', '\ue6e5')
+iconCodepoints.set('video-o', '\ue74a')
+iconCodepoints.set('shop-o', '\ue71b')
+iconCodepoints.set('shop-collect-o', '\ue71c')
+iconCodepoints.set('share-o', '\ue716')
+iconCodepoints.set('chat-o', '\ue68c')
+iconCodepoints.set('smile-comment-o', '\ue723')
+iconCodepoints.set('vip-card-o', '\ue737')
+iconCodepoints.set('award-o', '\ue669')
+iconCodepoints.set('diamond-o', '\ue6a2')
+iconCodepoints.set('volume-o', '\ue73c')
+iconCodepoints.set('cluster-o', '\ue693')
+iconCodepoints.set('wap-home-o', '\ue73e')
+iconCodepoints.set('photo-o', '\ue700')
+iconCodepoints.set('gift-card-o', '\ue6c8')
+iconCodepoints.set('expand-o', '\ue6b2')
+iconCodepoints.set('medal-o', '\ue6e9')
+iconCodepoints.set('good-job-o', '\ue6c5')
+iconCodepoints.set('manager-o', '\ue6e3')
+iconCodepoints.set('label-o', '\ue6dd')
+iconCodepoints.set('bookmark-o', '\ue67a')
+iconCodepoints.set('bill-o', '\ue67d')
+iconCodepoints.set('hot-o', '\ue6ce')
+iconCodepoints.set('hot-sale-o', '\ue6d2')
+iconCodepoints.set('new-o', '\ue6ea')
+iconCodepoints.set('new-arrival-o', '\ue6e8')
+iconCodepoints.set('goods-collect-o', '\ue6cd')
+iconCodepoints.set('eye-o', '\ue6b3')
+iconCodepoints.set('delete-o', '\ue6a6')
+iconCodepoints.set('font-o', '\ue6bc')
+iconCodepoints.set('contact-o', '\ue69f')
+iconCodepoints.set('notes-o', '\ue6f2')
+iconCodepoints.set('records-o', '\ue72a')
+iconCodepoints.set('cash-back-record-o', '\ue686')
+iconCodepoints.set('newspaper-o', '\ue6ec')
+iconCodepoints.set('discount-o', '\ue6ab')
+iconCodepoints.set('completed-o', '\ue69a')
+iconCodepoints.set('user-o', '\ue736')
+iconCodepoints.set('description-o', '\ue6a3')
+iconCodepoints.set('balance-o', '\ue670')
+iconCodepoints.set('refund-o', '\ue711')
+iconCodepoints.set('birthday-cake-o', '\ue674')
+iconCodepoints.set('orders-o', '\ue6ef')
+iconCodepoints.set('tv-o', '\ue734')
+iconCodepoints.set('envelop-o', '\ue6ae')
+iconCodepoints.set('flag-o', '\ue6ba')
+iconCodepoints.set('flower-o', '\ue6be')
+iconCodepoints.set('filter-o', '\ue6b5')
+iconCodepoints.set('bar-chart-o', '\ue671')
+iconCodepoints.set('chart-trending-o', '\ue688')
+iconCodepoints.set('brush-o', '\ue67f')
+iconCodepoints.set('bullhorn-o', '\ue67c')
+iconCodepoints.set('hotel-o', '\ue6d0')
+iconCodepoints.set('cashier-o', '\ue687')
+iconCodepoints.set('warn-o', '\ue747')
+iconCodepoints.set('calendar-o', '\ue67e')
+iconCodepoints.set('bulb-o', '\ue67b')
+iconCodepoints.set('user-circle-o', '\ue749')
+iconCodepoints.set('desktop-o', '\ue6a1')
+iconCodepoints.set('apps-o', '\ue665')
+iconCodepoints.set('home-o', '\ue6ca')
+iconCodepoints.set('back-top', '\ue66d')
+iconCodepoints.set('search', '\ue710')
+iconCodepoints.set('points', '\ue718')
+iconCodepoints.set('edit', '\ue6a8')
+iconCodepoints.set('qr', '\ue709')
+iconCodepoints.set('qr-invalid', '\ue70a')
+iconCodepoints.set('closed-eye', '\ue691')
+iconCodepoints.set('down', '\ue6aa')
+iconCodepoints.set('scan', '\ue713')
+iconCodepoints.set('revoke', '\ue70c')
+iconCodepoints.set('free-postage', '\ue6eb')
+iconCodepoints.set('certificate', '\ue689')
+iconCodepoints.set('logistics', '\ue6df')
+iconCodepoints.set('after-sale', '\ue661')
+iconCodepoints.set('exchange', '\ue6af')
+iconCodepoints.set('upgrade', '\ue732')
+iconCodepoints.set('ellipsis', '\ue6a9')
+iconCodepoints.set('sign', '\ue720')
+iconCodepoints.set('failure', '\ue6b8')
+iconCodepoints.set('ecard-pay', '\ue6ac')
+iconCodepoints.set('peer-pay', '\ue6f7')
+iconCodepoints.set('balance-pay', '\ue66f')
+iconCodepoints.set('credit-pay', '\ue69b')
+iconCodepoints.set('debit-pay', '\ue69d')
+iconCodepoints.set('cash-on-deliver', '\ue685')
+iconCodepoints.set('other-pay', '\ue6f3')
+iconCodepoints.set('tosend', '\ue72c')
+iconCodepoints.set('pending-payment', '\ue6f8')
+iconCodepoints.set('paid', '\ue6f1')
+iconCodepoints.set('aim', '\ue666')
+iconCodepoints.set('idcard', '\ue6d5')
+iconCodepoints.set('replay', '\ue70d')
+iconCodepoints.set('shrink', '\ue707')
+iconCodepoints.set('shield-o', '\ue74b')
+iconCodepoints.set('guide-o', '\ue74c')
+iconCodepoints.set('cash-o', '\ue74d')
+iconCodepoints.set('link-o', '\ue751')
+iconCodepoints.set('miniprogram-o', '\ue752')
+iconCodepoints.set('list-switch', '\ue6ad')
+iconCodepoints.set('list-switching', '\ue65a')
+iconCodepoints.set('location', '\ue6da')
+iconCodepoints.set('like', '\ue6d4')
+iconCodepoints.set('star', '\ue727')
+iconCodepoints.set('phone', '\ue6ff')
+iconCodepoints.set('setting', '\ue717')
+iconCodepoints.set('fire', '\ue6b6')
+iconCodepoints.set('coupon', '\ue69c')
+iconCodepoints.set('cart', '\ue684')
+iconCodepoints.set('shopping-cart', '\ue72b')
+iconCodepoints.set('cart-circle', '\ue682')
+iconCodepoints.set('friends', '\ue6c1')
+iconCodepoints.set('comment', '\ue697')
+iconCodepoints.set('gem', '\ue6bf')
+iconCodepoints.set('gift', '\ue6c6')
+iconCodepoints.set('point-gift', '\ue705')
+iconCodepoints.set('send-gift', '\ue739')
+iconCodepoints.set('service', '\ue70e')
+iconCodepoints.set('bag', '\ue66e')
+iconCodepoints.set('todo-list', '\ue72d')
+iconCodepoints.set('balance-list', '\ue66c')
+iconCodepoints.set('clear', '\ue68b')
+iconCodepoints.set('clock', '\ue68e')
+iconCodepoints.set('question', '\ue70f')
+iconCodepoints.set('checked', '\ue68d')
+iconCodepoints.set('add', '\ue65d')
+iconCodepoints.set('gold-coin', '\ue6c3')
+iconCodepoints.set('info', '\ue6cf')
+iconCodepoints.set('play-circle', '\ue701')
+iconCodepoints.set('pause-circle', '\ue6f4')
+iconCodepoints.set('stop-circle', '\ue729')
+iconCodepoints.set('warning', '\ue740')
+iconCodepoints.set('phone-circle', '\ue703')
+iconCodepoints.set('music', '\ue6e7')
+iconCodepoints.set('smile', '\ue71e')
+iconCodepoints.set('thumb-circle', '\ue72f')
+iconCodepoints.set('comment-circle', '\ue699')
+iconCodepoints.set('browsing-history', '\ue679')
+iconCodepoints.set('underway', '\ue731')
+iconCodepoints.set('more', '\ue6e1')
+iconCodepoints.set('video', '\ue73d')
+iconCodepoints.set('shop', '\ue71a')
+iconCodepoints.set('shop-collect', '\ue71d')
+iconCodepoints.set('share', '\ue714')
+iconCodepoints.set('chat', '\ue68a')
+iconCodepoints.set('smile-comment', '\ue748')
+iconCodepoints.set('vip-card', '\ue738')
+iconCodepoints.set('award', '\ue667')
+iconCodepoints.set('diamond', '\ue6a5')
+iconCodepoints.set('volume', '\ue73f')
+iconCodepoints.set('cluster', '\ue696')
+iconCodepoints.set('wap-home', '\ue73a')
+iconCodepoints.set('photo', '\ue708')
+iconCodepoints.set('gift-card', '\ue6c0')
+iconCodepoints.set('expand', '\ue6b4')
+iconCodepoints.set('medal', '\ue6e4')
+iconCodepoints.set('good-job', '\ue6c9')
+iconCodepoints.set('manager', '\ue6e0')
+iconCodepoints.set('label', '\ue6db')
+iconCodepoints.set('bookmark', '\ue675')
+iconCodepoints.set('bill', '\ue676')
+iconCodepoints.set('hot', '\ue6d3')
+iconCodepoints.set('hot-sale', '\ue6d8')
+iconCodepoints.set('new', '\ue6f0')
+iconCodepoints.set('new-arrival', '\ue6ed')
+iconCodepoints.set('goods-collect', '\ue6cb')
+iconCodepoints.set('eye', '\ue6b0')
+iconCodepoints.set('delete', '\ue6a4')
+iconCodepoints.set('font', '\ue6bb')
+iconCodepoints.set('contact', '\ue753')
+iconCodepoints.set('notes', '\ue63c')
+iconCodepoints.set('records', '\ue63d')
+iconCodepoints.set('cash-back-record', '\ue63e')
+iconCodepoints.set('newspaper', '\ue63f')
+iconCodepoints.set('discount', '\ue640')
+iconCodepoints.set('completed', '\ue641')
+iconCodepoints.set('user', '\ue642')
+iconCodepoints.set('description', '\ue643')
+iconCodepoints.set('wechat', '\ue744')
+iconCodepoints.set('wechat-pay', '\ue742')
+iconCodepoints.set('wechat-moments', '\ue74f')
+iconCodepoints.set('qq', '\ue74e')
+iconCodepoints.set('alipay', '\ue663')
+iconCodepoints.set('weibo', '\ue750')
+iconCodepoints.set('photograph', '\ue719')
+iconCodepoints.set('youzan-shield', '\ue746')
+iconCodepoints.set('umbrella-circle', '\ue730')
+iconCodepoints.set('bell', '\ue677')
+iconCodepoints.set('printer', '\ue6fd')
+iconCodepoints.set('map-marked', '\ue6de')
+iconCodepoints.set('card', '\ue680')
+iconCodepoints.set('add-square', '\ue65c')
+iconCodepoints.set('live', '\ue6e2')
+iconCodepoints.set('lock', '\ue6dc')
+iconCodepoints.set('audio', '\ue66a')
+iconCodepoints.set('graphic', '\ue6cc')
+iconCodepoints.set('column', '\ue694')
+iconCodepoints.set('invitation', '\ue6d6')
+iconCodepoints.set('play', '\ue702')
+iconCodepoints.set('pause', '\ue6f5')
+iconCodepoints.set('stop', '\ue724')
+iconCodepoints.set('weapp-nav', '\ue741')
+iconCodepoints.set('ascending', '\ue664')
+iconCodepoints.set('descending', '\ue6a0')
+iconCodepoints.set('bars', '\ue672')
+iconCodepoints.set('wap-nav', '\ue73b')
+iconCodepoints.set('enlarge', '\ue6b1')
+iconCodepoints.set('photo-fail', '\ue6fe')
+iconCodepoints.set('sort', '\ue721')
+
+/** 基础图标（10 个） */
+export const iconBasicNames: IconName[] = [
+  'arrow', 'arrow-left', 'arrow-up', 'arrow-down', 'success',
+  'cross', 'plus', 'minus', 'fail', 'circle',
+]
+
+/** 线性图标（139 个） */
+export const iconOutlineNames: IconName[] = [
+  'location-o', 'like-o', 'star-o', 'phone-o', 'setting-o',
+  'fire-o', 'coupon-o', 'cart-o', 'shopping-cart-o', 'cart-circle-o',
+  'friends-o', 'comment-o', 'gem-o', 'gift-o', 'point-gift-o',
+  'send-gift-o', 'service-o', 'bag-o', 'todo-list-o', 'balance-list-o',
+  'close', 'clock-o', 'question-o', 'passed', 'add-o',
+  'gold-coin-o', 'info-o', 'play-circle-o', 'pause-circle-o', 'stop-circle-o',
+  'warning-o', 'phone-circle-o', 'music-o', 'smile-o', 'thumb-circle-o',
+  'comment-circle-o', 'browsing-history-o', 'underway-o', 'more-o', 'video-o',
+  'shop-o', 'shop-collect-o', 'share-o', 'chat-o', 'smile-comment-o',
+  'vip-card-o', 'award-o', 'diamond-o', 'volume-o', 'cluster-o',
+  'wap-home-o', 'photo-o', 'gift-card-o', 'expand-o', 'medal-o',
+  'good-job-o', 'manager-o', 'label-o', 'bookmark-o', 'bill-o',
+  'hot-o', 'hot-sale-o', 'new-o', 'new-arrival-o', 'goods-collect-o',
+  'eye-o', 'delete-o', 'font-o', 'contact-o', 'notes-o',
+  'records-o', 'cash-back-record-o', 'newspaper-o', 'discount-o', 'completed-o',
+  'user-o', 'description-o', 'balance-o', 'refund-o', 'birthday-cake-o',
+  'orders-o', 'tv-o', 'envelop-o', 'flag-o', 'flower-o',
+  'filter-o', 'bar-chart-o', 'chart-trending-o', 'brush-o', 'bullhorn-o',
+  'hotel-o', 'cashier-o', 'warn-o', 'calendar-o', 'bulb-o',
+  'user-circle-o', 'desktop-o', 'apps-o', 'home-o', 'back-top',
+  'search', 'points', 'edit', 'qr', 'qr-invalid',
+  'closed-eye', 'down', 'scan', 'revoke', 'free-postage',
+  'certificate', 'logistics', 'after-sale', 'exchange', 'upgrade',
+  'ellipsis', 'sign', 'failure', 'ecard-pay', 'peer-pay',
+  'balance-pay', 'credit-pay', 'debit-pay', 'cash-on-deliver', 'other-pay',
+  'tosend', 'pending-payment', 'paid', 'aim', 'idcard',
+  'replay', 'shrink', 'shield-o', 'guide-o', 'cash-o',
+  'link-o', 'miniprogram-o', 'list-switch', 'list-switching',
+]
+
+/** 填充图标（108 个） */
+export const iconFilledNames: IconName[] = [
+  'location', 'like', 'star', 'phone', 'setting',
+  'fire', 'coupon', 'cart', 'shopping-cart', 'cart-circle',
+  'friends', 'comment', 'gem', 'gift', 'point-gift',
+  'send-gift', 'service', 'bag', 'todo-list', 'balance-list',
+  'clear', 'clock', 'question', 'checked', 'add',
+  'gold-coin', 'info', 'play-circle', 'pause-circle', 'stop-circle',
+  'warning', 'phone-circle', 'music', 'smile', 'thumb-circle',
+  'comment-circle', 'browsing-history', 'underway', 'more', 'video',
+  'shop', 'shop-collect', 'share', 'chat', 'smile-comment',
+  'vip-card', 'award', 'diamond', 'volume', 'cluster',
+  'wap-home', 'photo', 'gift-card', 'expand', 'medal',
+  'good-job', 'manager', 'label', 'bookmark', 'bill',
+  'hot', 'hot-sale', 'new', 'new-arrival', 'goods-collect',
+  'eye', 'delete', 'font', 'contact', 'notes',
+  'records', 'cash-back-record', 'newspaper', 'discount', 'completed',
+  'user', 'description', 'wechat', 'wechat-pay', 'wechat-moments',
+  'qq', 'alipay', 'weibo', 'photograph', 'youzan-shield',
+  'umbrella-circle', 'bell', 'printer', 'map-marked', 'card',
+  'add-square', 'live', 'lock', 'audio', 'graphic',
+  'column', 'invitation', 'play', 'pause', 'stop',
+  'weapp-nav', 'ascending', 'descending', 'bars', 'wap-nav',
+  'enlarge', 'photo-fail', 'sort',
+]
+

@@ -39,10 +39,11 @@ export type {
 /* ============ 入口常量（对外契约；内部同语义常量见 storage/constants，BUILTIN_ 前缀） ============ */
 
 /** 默认 key 前缀（规避 uni- / dcloud_ 平台保留前缀） */
-export const DEFAULT_KEY_PREFIX: string = 'mx_storage:'
+// 5.34 发行构建 uts-proxy 对导出字符串常量生成非法 JS（genInitCode 未加引号），暂不导出（全工程无消费方，上游修复后恢复）
+const DEFAULT_KEY_PREFIX: string = 'mx_storage:'
 
 /** 统一错误 errSubject（StorageError.errSubject 固定值） */
-export const STORAGE_ERR_SUBJECT: string = 'unix-storage'
+const STORAGE_ERR_SUBJECT: string = 'unix-storage'
 
 /* ============ 默认实例 API（export function 具名声明） ============ */
 

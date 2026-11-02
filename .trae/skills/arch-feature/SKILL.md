@@ -13,10 +13,9 @@ description: 按本项目既定架构标准流程开发新功能或新业务模�
 - 判定交付面：新页面 / 既有页面改造 / 纯逻辑层（无 UI）。
 - 后端协议未明确时：先与用户确认字段；确需占位则按 `POST /<domain>/xxx` 风格自拟并在 api 函数注释标注「协议待确认」。
 
-## 1. DTO 类型（api/types/）
+## 1. DTO 类型（api/types.uts）
 
-- 新建 `api/types/<domain>.uts`：type 定义后端协议字段（显式类型，不加 ? 除非后端确认可缺省）。
-- 在 `api/types.uts` 追加一行具名转发：`export type { XxxResult } from './types/<domain>.uts'`。
+- 在 `api/types.uts` 内直接定义后端协议 type（显式类型，不加 ? 除非后端确认可缺省）——**禁止 types/ 子目录转发链**（app-android 发行拷贝不追踪类型转发链，见 architecture.md 第 3 节布局约束）。
 - 禁止：interface、可选字段瞎猜、把 UI 字段混进 DTO。
 
 ## 2. api 模块（api/<domain>.uts）
@@ -26,16 +25,16 @@ description: 按本项目既定架构标准流程开发新功能或新业务模�
 
 ## 3. store 模块（stores/）
 
-- `stores/types/<domain>.uts` 定义 `XxxStore` 类型（state 用 Ref、action 用箭头函数签名）→ `stores/types.uts` 补转发。
-- `stores/modules/<domain>.uts`：setup 式 `defineStore<XxxStore>('<domain>', (): XxxStore => {...})`，返回值 `as XxxStore` 收尾；action 内调 api 函数。
-- 令牌相关写 `utils/auth.uts`；跨 store 依赖直接在 setup 内调用对方 `useXxxStore`（注册表保证单例）。
+- `stores/modules/<domain>.uts`：class 式——`class XxxStore extends PiniaStoreBase`，state 用 `reactive<XxxState>` 包裹（字段直读写，无 `.value`；`import { reactive } from 'vue'`）、派生值用 class getter（**禁 computed 字段**：插件内 effectScope 不可用，跨页面失效）、action 为普通 method，constructor 中 `super()` 后必须 `this.bindState(this.state)`；注册写 `export const useXxxStore = defineStore<XxxStore>('<domain>', (): XxxStore => new XxxStore())`，action 内调 api 函数。
+- state 类型（`XxxState`）按「单文件模块私有契约就近定义」在模块内 export；`stores/types.uts` 追加一行转发：`export type { XxxStore } from './modules/<domain>.uts'`。
+- 令牌相关写 `utils/auth.uts`（token 不用内置持久化插件承载，职责分离）；跨 store 依赖在 method 内调用对方 `useXxxStore`（注册表保证单例，不放字段初始化器）。
 
 ## 4. 页面 / 组件
 
 - 新页面：`pages/<name>/<name>.uvue`（组合式 API）+ `pages.json` 注册 + 页内 `defineUniPage({ name, title })`——**每个页面（新建与改造）都必须声明该宏**，缺声明即不符合路由规则（title 会由插件同步到 pages.json 与路由 meta）。路由表 `router/routes.gen.uts` 由 vite 插件生成，**禁止手改**；分包页面放 `pages-sub/`。
 - 页面跳转：一律 `useRouter()` 的 `push` / `replace` / `relaunch` / `back`，**禁止** `uni.navigateTo` 系（绕过守卫链）；参数用 query Map（读取配 `queryInt` / `queryBool`）。
 - 守卫语义：新页面默认要求登录（白名单制），免登录页面必须同时在 `router/permission.uts` 的 `whiteList` 登记。
-- 可复用 UI：`components/<Name>/<Name>.uvue`（easycom，页面免 import）；组件内只管自身样式，间距由页面外层 view 控制。
+- 可复用 UI：**优先复用 `uni_modules/m-ui-x` 现成组件**（easycom 零注册，标签即用；主题定制仅在根 `uni.scss` 定义 `$m-*` 变量，禁止 @import 其 vars.scss）；库内没有的自有组件才建 `components/<Name>/<Name>.uvue`（easycom，页面免 import）；组件内只管自身样式，间距由页面外层 view 控制。
 - 横切 UI 状态：抽 `composables/useXxx.uts`，State 类型进 `composables/types/` 并补聚合出口转发。
 - 交互反馈：toast/modal 一律 ux-utils（`showToast` / `showModalAsync`）；禁用 uni.showToast / uni.showModal。
 
@@ -64,4 +63,6 @@ description: 按本项目既定架构标准流程开发新功能或新业务模�
 - 新建 `export * from` 转发、值转发链、跨域复制第三方类型
 - 手改 `routes.gen.uts`、在模块顶层写 configureRequest 等副作用
 - UTS 写法踩线：undefined、truthy 判断、interface 对象字面量、enum 跨端传值、throw 非 Error
+- store 写 setup 式定义 / 经 `storeToRefs` 或 `.value` 访问 state（ux-pinia 0.2.0 已移除该 API，class 式写法见第 3 步）
 - 凭记忆写插件导入路径（一律以 `.trae/rules/architecture.md` 第 1.1 节插件清单为准）
+- 自绘 m-ui-x 已有的组件（动手前先查插件清单组件列表）、在 uni.scss `@import` m-ui-x 的 vars.scss（sass 循环导入）

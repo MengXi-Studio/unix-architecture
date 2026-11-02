@@ -24,7 +24,8 @@ export function ensureAuthReady(): Promise<boolean> {
     return readyPromise!
   }
 
-  readyPromise = get(TOKEN_KEY)
+  // 显式泛型：Kotlin 端 T 无法从 then 回调反推（5.34 云打包实证：推断失败编译错误）
+  readyPromise = get<string>(TOKEN_KEY)
     .then((raw): boolean => {
       if (raw != null) {
         cachedToken = raw as string

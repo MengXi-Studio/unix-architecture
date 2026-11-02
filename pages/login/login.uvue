@@ -6,9 +6,9 @@
 		<text class="app-name">{{ appName }}</text>
 		<input class="input" type="text" v-model="username" placeholder="用户名" />
 		<input class="input" type="text" :password="true" v-model="password" placeholder="密码" />
-		<button class="login-btn" type="primary" :disabled="loading" @click="handleLogin">
-			{{ loading ? '登录中…' : '登录' }}
-		</button>
+		<view class="login-btn-box">
+			<m-button type="primary" block :loading="loading" loading-text="登录中…" @click="handleLogin">登录</m-button>
+		</view>
 	</view>
 </template>
 
@@ -75,7 +75,7 @@ const handleLogin = (): void => {
 		font-size: 14px;
 	}
 
-	.login-btn {
+	.login-btn-box {
 		margin-top: 16px;
 	}
 </style>

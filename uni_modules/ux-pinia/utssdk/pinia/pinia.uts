@@ -5,7 +5,7 @@
  * 避免同名 top-level 符号触发 Kotlin 导出符号静默重整）。
  *
  * UTS 约束：插件不能返回对象合并进 store（禁止动态注入属性），PiniaPlugin
- * 返回 void，插件逻辑通过 PiniaPluginContext 完成（unix-storage/x-pinia-s 同款约束）。
+ * 返回 void，插件逻辑通过 PiniaPluginContext 完成（unix-storage 同款约束）。
  */
 import type { PiniaPlugin, PiniaPluginContext } from '../interface.uts'
 

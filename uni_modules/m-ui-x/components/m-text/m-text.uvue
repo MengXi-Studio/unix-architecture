@@ -1,0 +1,128 @@
+<template>
+	<!-- 单 text 根节点：文本样式必须写在 text 上（uvue 样式不继承）；default 插槽直通承载文本 -->
+	<text :class="rootClass" :style="rootStyle" :max-lines="maxLinesValue" :user-select="props.userSelect">
+		<slot></slot>
+	</text>
+</template>
+
+<script setup lang="uts">
+	/**
+	 * 文本大小档位（IDE 自动提示，仅三档枚举）
+	 */
+	type TextSize = 'small' | 'medium' | 'large'
+
+	type Props = {
+		/** 文本颜色：支持语义色名（default / secondary / tertiary / fourth / primary / success / warning / danger）与 CSS 色值（#hex 等） */
+		color?: string
+		/** 文本大小档位 */
+		size?: TextSize
+		/** 是否单行省略（超出宽度显示省略号，需配合外部宽度约束）；与 line-clamp 同传时本属性不生效 */
+		truncated?: boolean
+		/** 多行省略行数（原生 max-lines 直通），为空不限制 */
+		lineClamp?: number
+		/** 文本是否可选（长按/拖选复制，vapor 官方推荐属性） */
+		userSelect?: boolean
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		color: 'default',
+		size: 'medium',
+		truncated: false,
+		lineClamp: null,
+		userSelect: false,
+		customClass: '',
+		customStyle: ''
+	})
+
+	/** 语义色名单：命中走编译期变体类（绑定 $m-* 主题变量，覆盖仍生效），否则视为 CSS 色值走 inline */
+	const semanticColors: string[] = ['default', 'secondary', 'tertiary', 'fourth', 'primary', 'success', 'warning', 'danger']
+
+	/** 语义色变体名：color 为语义色名时返回该名，否则空串 */
+	const colorVariant = computed<string>(() => {
+		return semanticColors.indexOf(props.color) >= 0 ? props.color : ''
+	})
+
+	/** 根节点类名：size / color 变体类按 props 拼接（medium 与 default 走基类默认值不拼类）；truncated 与 line-clamp 同传时 line-clamp 优先，不再拼接 */
+	const rootClass = computed<string>(() => {
+		let cls = 'm-text'
+		if (props.size == 'small') cls += ' m-text--sm'
+		if (props.size == 'large') cls += ' m-text--lg'
+		if (colorVariant.value != '' && colorVariant.value != 'default') cls += ' m-text--' + colorVariant.value
+		if (props.truncated && props.lineClamp == null) cls += ' m-text--truncated'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 根节点动态样式：customStyle 补分号后拼接；color 为 CSS 色值时走 inline（语义色走变体类） */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		if (props.color != '' && colorVariant.value == '') style += 'color: ' + props.color + ';'
+		return style
+	})
+
+	/** 多行省略行数：未传时归一为 0（原生不限行数的哨兵值，实施实测确认；异常则改大数兜底） */
+	const maxLinesValue = computed<number>(() => {
+		return props.lineClamp == null ? 0 : props.lineClamp
+	})
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss，
+	 * uni.scss 注入机制与组件内引入同一文件会触发循环导入）。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 基类（default 色 + medium 基准字号） ========== */
+	.m-text {
+		color: $m-text-color;
+		font-size: $m-text-font-size-md;
+	}
+
+	/* ========== 字号档位变体（medium 走基类不单设类） ========== */
+	.m-text--sm {
+		font-size: $m-text-font-size-sm;
+	}
+	.m-text--lg {
+		font-size: $m-text-font-size-lg;
+	}
+
+	/* ========== 灰阶语义色变体 ========== */
+	.m-text--secondary {
+		color: $m-text-color-secondary;
+	}
+	.m-text--tertiary {
+		color: $m-text-color-tertiary;
+	}
+	.m-text--fourth {
+		color: $m-text-color-fourth;
+	}
+
+	/* ========== 主题语义色变体（复用既有 $m-color-*） ========== */
+	.m-text--primary {
+		color: $m-color-primary;
+	}
+	.m-text--success {
+		color: $m-color-success;
+	}
+	.m-text--warning {
+		color: $m-color-warning;
+	}
+	.m-text--danger {
+		color: $m-color-danger;
+	}
+
+	/* ========== 单行省略变体（生效依赖外部宽度约束） ========== */
+	.m-text--truncated {
+		white-space: nowrap;
+		text-overflow: ellipsis;
+		overflow: hidden;
+	}
+</style>

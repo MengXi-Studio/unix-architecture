@@ -1,6 +1,10 @@
 /**
- * stores 域类型聚合出口：消费方统一从本文件导入 store 类型，新增领域类型文件在此追加转发。
+ * stores 域类型聚合出口：消费方统一从本文件导入 store 类型，新增领域类型在此追加转发。
  * 采用具名类型转发（export type）——与 uni_modules 库入口已验证的跨端模式一致，
  * 规避 Kotlin 端对纯类型 star re-export 的未实证风险。
+ *
+ * ux-pinia 0.2.0 起 store 为 class 式：出口形状由 modules/*.uts 的 class 声明固化，
+ * 本文件仅转发 class 类型；state 形状（如 UserState）按「单文件模块私有契约就近定义」
+ * 判据收敛在模块实现内。
  */
-export type { UserStore } from './types/user.uts'
+export type { UserStore } from './modules/user.uts'

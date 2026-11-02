@@ -1,0 +1,121 @@
+/**
+ * 持久化插件（0.2.0，原独立包 @meng-xi/unix-pinia-persist 并入内置）
+ *
+ * 用法（main.uts 顶层登记）：
+ * ```
+ * setActivePinia(createPinia().use(createPersistPlugin({
+ *     keyPrefix: 'ux-pinia:',
+ *     includeStores: null,          // null = 全部 store
+ *     excludeStores: [],
+ *     serializer: null              // null = JSON.stringify
+ * })))
+ * ```
+ *
+ * 语义（诚实边界，UTS 无全局订阅钩子）：
+ * - 恢复：store 创建时读存储 → store._hydrate(data)（自动）
+ * - 落盘：store.$patch / $reset / $save 触发 $subscribe → _serialize() 快照写存储（自动）
+ * - direct 修改 state 字段**不会**自动落盘——关键操作后调 store.$save()，或重写 _serialize
+ *   后在 action 内手动调用 $save()
+ * - 按需重写 _serialize() / _hydrate() 是持久化可用的前提（Template Method 契约）
+ */
+import type { PiniaPlugin, PiniaPluginContext } from '../interface.uts'
+import { PiniaStoreBase } from '../pinia/store-base.uts'
+import { getStorageRaw, setStorageRaw, removeStorageRaw } from './storage.uts'
+
+/** 持久化配置 */
+export type PersistOptions = {
+	/** 存储键前缀（完整键 = keyPrefix + storeId），默认 'ux-pinia:' 由 createPersistPluginDefault 处理 */
+	keyPrefix: string
+	/** 仅持久化指定 store（null = 全部） */
+	includeStores: Array<string> | null
+	/** 排除指定 store */
+	excludeStores: Array<string>
+	/** 自定义序列化器（null = JSON.stringify） */
+	serializer: ((state: UTSJSONObject) => string) | null
+}
+
+/** 默认配置（UTS 无默认参数，经工厂函数承载） */
+function defaultOptions(): PersistOptions {
+	return {
+		keyPrefix: 'ux-pinia:',
+		includeStores: null,
+		excludeStores: new Array<string>(),
+		serializer: null
+	} as PersistOptions
+}
+
+/** 合并使用者配置与默认值（UTS 类型必须完整，逐字段兜底） */
+function mergeOptions(options: PersistOptions): PersistOptions {
+	const merged = defaultOptions()
+	if (options.keyPrefix != null && options.keyPrefix.length > 0) {
+		merged.keyPrefix = options.keyPrefix
+	}
+	if (options.includeStores != null) {
+		merged.includeStores = options.includeStores
+	}
+	if (options.excludeStores != null) {
+		merged.excludeStores = options.excludeStores
+	}
+	if (options.serializer != null) {
+		merged.serializer = options.serializer
+	}
+	return merged
+}
+
+/**
+ * 创建持久化插件。持久化可用的前提：store 按需重写 _serialize() / _hydrate()。
+ * 序列化产物直接以 JSON 字符串存储（损坏 parse 失败 → 不 hydrate，天然回退 state 初始值）。
+ */
+export function createPersistPluginImpl(options: PersistOptions): PiniaPlugin {
+	const opts = mergeOptions(options)
+	return (ctx: PiniaPluginContext): void => {
+		// include / exclude 过滤
+		if (opts.includeStores != null) {
+			let included = false
+			for (let i = 0; i < opts.includeStores.length; i++) {
+				if (opts.includeStores[i] == ctx.storeId) {
+					included = true
+					break
+				}
+			}
+			if (!included) {
+				return
+			}
+		}
+		for (let i = 0; i < opts.excludeStores.length; i++) {
+			if (opts.excludeStores[i] == ctx.storeId) {
+				return
+			}
+		}
+
+		const base = ctx.store as any as PiniaStoreBase
+		if (base == null || !(base instanceof PiniaStoreBase)) {
+			return
+		}
+		if (!base.hasBoundState()) {
+			return
+		}
+
+		const storageKey = opts.keyPrefix + ctx.storeId
+
+		// 恢复：读存储 → _hydrate（损坏 parse 失败 → 不 hydrate，回退 state 初始值）
+		const raw: string | null = getStorageRaw(storageKey)
+		if (raw != null) {
+			const parsed: any | null = JSON.parse(raw)
+			if (parsed != null) {
+				base._hydrate(parsed as UTSJSONObject)
+			}
+		}
+
+		// 落盘：订阅 $patch / $reset / $save 触发的状态分发
+		base.$subscribe((type: string, state: UTSJSONObject): void => {
+			const json: string = opts.serializer != null ? opts.serializer!(state) : JSON.stringify(state)
+			setStorageRaw(storageKey, json)
+		})
+	}
+}
+
+/** 清空指定 store 的持久化数据 */
+export function clearPersistedStateImpl(storeId: string, keyPrefix: string): void {
+	removeStorageRaw(keyPrefix + storeId)
+}

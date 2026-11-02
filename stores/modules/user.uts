@@ -1,61 +1,73 @@
 /**
  * 用户模块（对标 vue-admin-template src/store/modules/user.js）
  *
- * state：token / name / avatar（Ref）
- * action：loginAction（登录 + 持久化）/ getInfoAction / logoutAction / resetToken
- * 说明：setup 式 store 中 getter 即 ComputedRef，本模块暂无派生值；
- *      token 持久化委托 utils/auth.uts（对标 js-cookie 职责分离）。
+ * state：token / name / avatar（ux-pinia 0.2.0 class 式，reactive<T> 包裹，无 .value）
+ * action：loginAction（登录 + 持久化）/ getInfoAction / logoutAction / resetToken（普通 method）
+ * 说明：派生值用 class getter，本模块暂无；token 持久化委托 utils/auth.uts
+ *      （对标 js-cookie 职责分离，不使用 ux-pinia 内置持久化插件，判据见任务文档
+ *      .trae/documents/优化/2026-11-01/stores-ux-pinia迁移.md Q1）。
+ *      消费方访问：store.state.字段；模板事件绑定 method 必须带括号。
  */
-import type { Ref } from 'vue'
-import { defineStore } from '@/uni_modules/ux-pinia'
+import { reactive } from 'vue'
+import { defineStore, PiniaStoreBase } from '@/uni_modules/ux-pinia'
 import { login, getInfo, logout } from '@/api/user.uts'
 import { setToken as persistToken, removeToken as clearPersistedToken } from '@/utils/auth.uts'
-import type { UserStore } from '../types.uts'
 
-export const useUserStore = defineStore<UserStore>('user', (): UserStore => {
-  const token: Ref<string> = ref('')
-  const name: Ref<string> = ref('')
-  const avatar: Ref<string> = ref('')
+/** 用户模块 state（单文件模块私有契约，就近定义） */
+export type UserState = {
+  token: string
+  name: string
+  avatar: string
+}
+
+export class UserStore extends PiniaStoreBase {
+  state: UserState = reactive<UserState>({ token: '', name: '', avatar: '' })
+
+  constructor() {
+    super()
+    // $-API（$patch / $reset / $subscribe）与持久化的前提
+    this.bindState(this.state)
+  }
 
   /** 登录：成功后 token 写入 store 与持久层 */
-  const loginAction = async (username: string, password: string): Promise<void> => {
+  async loginAction(username: string, password: string): Promise<void> {
     const dto = await login(username, password)
 
-    token.value = dto.token
+    this.state.token = dto.token
     persistToken(dto.token)
   }
 
   /** 拉取用户信息 */
-  const getInfoAction = async (): Promise<void> => {
+  async getInfoAction(): Promise<void> {
     const dto = await getInfo()
 
-    name.value = dto.name
-    avatar.value = dto.avatar
+    this.state.name = dto.name
+    this.state.avatar = dto.avatar
   }
 
   /** 退出登录：调接口后强制清本地状态（接口失败不阻断退出） */
-  const logoutAction = async (): Promise<void> => {
+  async logoutAction(): Promise<void> {
     try {
       await logout()
     } catch (e) {
       console.warn('[store:user] logout 接口失败，仍执行本地清理：' + `${e}`)
     }
 
-    token.value = ''
-    name.value = ''
-    avatar.value = ''
+    this.state.token = ''
+    this.state.name = ''
+    this.state.avatar = ''
 
     clearPersistedToken()
   }
 
   /** 仅清本地登录态（守卫 getInfo 失败路径使用，对标 user/resetToken） */
-  const resetToken = (): void => {
-    token.value = ''
-    name.value = ''
-    avatar.value = ''
+  resetToken(): void {
+    this.state.token = ''
+    this.state.name = ''
+    this.state.avatar = ''
 
     clearPersistedToken()
   }
+}
 
-  return { token, name, avatar, loginAction, getInfoAction, logoutAction, resetToken } as UserStore
-})
+export const useUserStore = defineStore<UserStore>('user', (): UserStore => new UserStore())

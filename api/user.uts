@@ -2,7 +2,7 @@
  * 用户域接口模块（api 层，按领域拆分；对标社区流行脚手架 src/api/*.ts）
  *
  * 薄封装原则：仅做请求转发、路径收敛与 DTO 还原，不写业务逻辑；
- * DTO 类型定义于 api/types/api.uts（经 api/types.uts 聚合出口消费），
+ * DTO 类型定义于 api/types.uts（单文件即事实源），
  * 此处逐调用点以具体类型内联还原（JSON.parse<T> 泛型经二次封装会在 Kotlin 端触发泛型擦除，勿提取公共泛型包装）。
  */
 import { request } from '@/uni_modules/mx-request'

@@ -10,7 +10,7 @@ import { useLink } from '../composables/index.uts'
 /**
  * RouterLink 组件（uni-app x · script setup 语法糖）
  *
- * 适配式 vue-router RouterLink：基于 useLink 提供点击导航。
+ * 适配式 RouterLink 组件：基于 useLink 提供点击导航。
  * 因 uni-app x 静态页面模型无页内渲染占位，本组件仅承担"可交互导航入口"角色。
  */
 

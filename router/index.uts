@@ -4,6 +4,8 @@ import { routes } from './routes.gen.uts'
 const router = createRouter({
 	routes,
 	strict: true,
+	// back() 页面栈不足时兜底回首页（走完整守卫链）：覆盖深链 / 刷新直连场景（ux-router 0.8.2）
+	backFallback: '/pages/index/index',
 	// 纵深防御：拦截外部直调的 uni.navigateTo 等原生导航，转交路由器执行守卫链
 	plugins: [new InterceptorPlugin()],
 	interceptUniApi: true

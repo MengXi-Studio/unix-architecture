@@ -1,7 +1,17 @@
 /**
- * composables 域类型聚合出口：消费方统一从本文件导入类型，新增领域类型文件在此追加转发。
- * 采用具名类型转发（export type）——与 uni_modules 库入口已验证的跨端模式一致，
- * 规避 Kotlin 端对纯类型 star re-export 的未实证风险。
- * 注意：仅类型走本出口，composable 函数仍从各文件直接导入。
+ * composables 域类型定义与聚合出口
+ *
+ * 仅类型走本文件，composable 函数仍从各文件直接导入。
+ *
+ * 布局约束（app-android 发行链路实测）：发行拷贝不追踪 `export type ... from`
+ * 转发链——仅被类型转发引用的子目录文件不进发行树，分析器解析转发语句即报
+ * `index not found`。故域类型统一收敛在本单文件内定义，禁止再建 types/ 子目录。
  */
-export type { LoadingState } from './types/useLoading.uts'
+import type { Ref } from 'vue'
+
+export type LoadingState = {
+  /** 是否加载中 */
+  loading: Ref<boolean>
+  /** 执行异步任务：执行期间 loading 为 true，结束（含失败）自动复位 */
+  run: (task: () => Promise<void>) => Promise<void>
+}

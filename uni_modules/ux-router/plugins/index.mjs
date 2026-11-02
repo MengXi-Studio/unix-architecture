@@ -1800,9 +1800,14 @@ var require_picomatch2 = __commonJS({
   }
 });
 
-// ../../node_modules/.pnpm/unplugin@3.4.0_esbuild@0.27.7_rollup@4.63.4_vite@5.4.21_@types+node@20.19.43_terser@5.51.2_/node_modules/unplugin/dist/parse-B1HhnTCu.mjs
+// ../../node_modules/.pnpm/unplugin@3.5.0_esbuild@0.27_6436bf517a9c98509f41fee2765339e0/node_modules/unplugin/dist/filter-BxeTw5TW.mjs
 var import_picomatch = __toESM(require_picomatch2(), 1);
 import { resolve } from "path";
+var parseImpl;
+function parse(code, opts = {}) {
+  if (!parseImpl) throw new Error("Parse implementation is not set. Please call setParseImpl first.");
+  return parseImpl(code, opts);
+}
 function toArray(array) {
   array = array || [];
   if (Array.isArray(array)) return array;
@@ -1906,19 +1911,26 @@ function normalizeObjectHook(name, hook) {
     filter: filter || (() => true)
   };
 }
-var parseImpl;
-function parse(code, opts = {}) {
-  if (!parseImpl) throw new Error("Parse implementation is not set. Please call setParseImpl first.");
-  return parseImpl(code, opts);
-}
 
-// ../../node_modules/.pnpm/unplugin@3.4.0_esbuild@0.27.7_rollup@4.63.4_vite@5.4.21_@types+node@20.19.43_terser@5.51.2_/node_modules/unplugin/dist/webpack-like-BQ10QW9c.mjs
+// ../../node_modules/.pnpm/unplugin@3.5.0_esbuild@0.27_6436bf517a9c98509f41fee2765339e0/node_modules/unplugin/dist/webpack-like-BnS73yq4.mjs
 import { isAbsolute, normalize } from "path";
-function transformUse(data, plugin, transformLoader) {
+function createCachedIdFilter(getHook) {
+  let cached;
+  return (id) => {
+    const hook = getHook();
+    const cwd = process.cwd();
+    if (cached?.hook !== hook || cached.cwd !== cwd) cached = {
+      hook,
+      cwd,
+      filter: normalizeObjectHook("load", hook).filter
+    };
+    return cached.filter(id);
+  };
+}
+function transformUse(data, plugin, transformLoader, filter) {
   if (data.resource == null) return [];
   const id = normalizeAbsolutePath(data.resource + (data.resourceQuery || ""));
   if (plugin.transformInclude && !plugin.transformInclude(id)) return [];
-  const { filter } = normalizeObjectHook("load", plugin.transform);
   if (!filter(id)) return [];
   return [{
     loader: transformLoader,
@@ -1931,7 +1943,7 @@ function normalizeAbsolutePath(path4) {
   else return path4;
 }
 
-// ../../node_modules/.pnpm/unplugin@3.4.0_esbuild@0.27.7_rollup@4.63.4_vite@5.4.21_@types+node@20.19.43_terser@5.51.2_/node_modules/unplugin/dist/context-AOdkHe_5.mjs
+// ../../node_modules/.pnpm/unplugin@3.5.0_esbuild@0.27_6436bf517a9c98509f41fee2765339e0/node_modules/unplugin/dist/context-BIi6ugui.mjs
 import { resolve as resolve2 } from "path";
 import { Buffer as Buffer2 } from "buffer";
 function createBuildContext(compiler, compilation, loaderContext, inputSourceMap) {
@@ -1973,7 +1985,7 @@ function normalizeMessage(error) {
   return err;
 }
 
-// ../../node_modules/.pnpm/unplugin@3.4.0_esbuild@0.27.7_rollup@4.63.4_vite@5.4.21_@types+node@20.19.43_terser@5.51.2_/node_modules/unplugin/dist/utils-CfJoYofY.mjs
+// ../../node_modules/.pnpm/unplugin@3.5.0_esbuild@0.27_6436bf517a9c98509f41fee2765339e0/node_modules/unplugin/dist/utils-FDqLgfZL.mjs
 import { basename, dirname, resolve as resolve3 } from "path";
 import fs from "fs";
 function encodeVirtualModuleId(id, plugin) {
@@ -2025,7 +2037,7 @@ var FakeVirtualModulesPlugin = class FakeVirtualModulesPlugin2 {
   }
 };
 
-// ../../node_modules/.pnpm/unplugin@3.4.0_esbuild@0.27.7_rollup@4.63.4_vite@5.4.21_@types+node@20.19.43_terser@5.51.2_/node_modules/unplugin/dist/context-CjyN3JjT.mjs
+// ../../node_modules/.pnpm/unplugin@3.5.0_esbuild@0.27_6436bf517a9c98509f41fee2765339e0/node_modules/unplugin/dist/context-Dn-u6jHU.mjs
 import { createRequire } from "module";
 import { resolve as resolve4 } from "path";
 import { Buffer as Buffer3 } from "buffer";
@@ -2080,11 +2092,12 @@ function normalizeMessage2(error) {
   return err;
 }
 
-// ../../node_modules/.pnpm/unplugin@3.4.0_esbuild@0.27.7_rollup@4.63.4_vite@5.4.21_@types+node@20.19.43_terser@5.51.2_/node_modules/unplugin/dist/index.mjs
+// ../../node_modules/.pnpm/unplugin@3.5.0_esbuild@0.27_6436bf517a9c98509f41fee2765339e0/node_modules/unplugin/dist/index.mjs
 import { createRequire as createRequire2 } from "module";
 import path, { extname, isAbsolute as isAbsolute2, resolve as resolve6 } from "path";
-import fs2 from "fs";
 import { Buffer as Buffer$1 } from "buffer";
+import fs2 from "fs";
+import { fileURLToPath } from "url";
 
 // ../../node_modules/.pnpm/@jridgewell+sourcemap-codec@1.6.0/node_modules/@jridgewell/sourcemap-codec/dist/sourcemap-codec.mjs
 var comma = ",".charCodeAt(0);
@@ -2907,11 +2920,11 @@ function remapping(input, loader, options) {
   return new SourceMap(traceMappings(tree), opts);
 }
 
-// ../../node_modules/.pnpm/unplugin@3.4.0_esbuild@0.27.7_rollup@4.63.4_vite@5.4.21_@types+node@20.19.43_terser@5.51.2_/node_modules/unplugin/dist/index.mjs
+// ../../node_modules/.pnpm/unplugin@3.5.0_esbuild@0.27_6436bf517a9c98509f41fee2765339e0/node_modules/unplugin/dist/index.mjs
 import * as querystring from "querystring";
 import process$1 from "process";
 var __require = /* @__PURE__ */ (() => createRequire2(import.meta.url))();
-var version$1 = "3.4.0";
+var version$1 = "3.5.0";
 var ExtToLoader$1 = {
   ".js": "js",
   ".mjs": "js",
@@ -2929,226 +2942,10 @@ var ExtToLoader$1 = {
   ".json": "json",
   ".txt": "text"
 };
-function guessLoader$1(id) {
+function guessLoader$1(code, id) {
   return ExtToLoader$1[path.extname(id).toLowerCase()] || "js";
 }
 function unwrapLoader$1(loader, code, id) {
-  if (typeof loader === "function") return loader(code, id);
-  return loader;
-}
-function createBuildContext$1(build2) {
-  const watchFiles = [];
-  return {
-    addWatchFile(file) {
-      watchFiles.push(file);
-    },
-    getWatchFiles() {
-      return watchFiles;
-    },
-    emitFile(emittedFile) {
-      const outFileName = emittedFile.fileName || emittedFile.name;
-      const outdir = build2?.config?.outdir;
-      if (outdir && emittedFile.source && outFileName) {
-        const outPath = path.resolve(outdir, outFileName);
-        const outDir = path.dirname(outPath);
-        if (!fs2.existsSync(outDir)) fs2.mkdirSync(outDir, { recursive: true });
-        fs2.writeFileSync(outPath, emittedFile.source);
-      }
-    },
-    parse,
-    getNativeBuildContext() {
-      return {
-        framework: "bun",
-        build: build2
-      };
-    }
-  };
-}
-function createPluginContext$1(buildContext) {
-  const errors = [];
-  const warnings = [];
-  return {
-    errors,
-    warnings,
-    mixedContext: {
-      ...buildContext,
-      error(error) {
-        errors.push(error);
-      },
-      warn(warning) {
-        warnings.push(warning);
-      }
-    }
-  };
-}
-function toBunNamespace(name) {
-  return name.replace(/[^\w$-]/g, "-");
-}
-function getBunPlugin(factory) {
-  return (userOptions) => {
-    if (typeof Bun === "undefined") throw new ReferenceError("Bun is not supported in this environment");
-    if (!Bun.semver.satisfies(Bun.version, ">=1.2.22")) throw new Error("Bun 1.2.22 or higher is required, please upgrade Bun");
-    const meta = {
-      framework: "bun",
-      versions: {
-        bun: Bun.version,
-        unplugin: version$1
-      }
-    };
-    const plugins = toArray(factory(userOptions, meta));
-    return {
-      name: (plugins.length === 1 ? plugins[0].name : meta.bunHostName) ?? `unplugin-host:${plugins.map((p) => p.name).join(":")}`,
-      async setup(build2) {
-        const context = createBuildContext$1(build2);
-        for (const plugin of plugins) await plugin.bun?.setup?.(build2);
-        if (plugins.some((plugin) => plugin.buildStart)) build2.onStart(async () => {
-          for (const plugin of plugins) if (plugin.buildStart) await plugin.buildStart.call(context);
-        });
-        const resolveIdHooks = plugins.filter((plugin) => plugin.resolveId).map((plugin) => ({
-          plugin,
-          ...normalizeObjectHook("resolveId", plugin.resolveId)
-        }));
-        const loadHooks = plugins.filter((plugin) => plugin.load).map((plugin) => ({
-          plugin,
-          ...normalizeObjectHook("load", plugin.load)
-        }));
-        const transformHooks = plugins.filter((plugin) => plugin.transform || plugin.transformInclude).map((plugin) => ({
-          plugin,
-          ...normalizeObjectHook("transform", plugin.transform)
-        }));
-        const virtualModulePlugins = /* @__PURE__ */ new Set();
-        for (const plugin of plugins) if (plugin.resolveId && plugin.load) virtualModulePlugins.add(plugin.name);
-        if (resolveIdHooks.length) build2.onResolve({ filter: /.*/ }, async (args) => {
-          if (build2.config?.external?.includes(args.path)) return;
-          for (const { plugin, handler, filter } of resolveIdHooks) {
-            if (!filter(args.path)) continue;
-            const { mixedContext, errors, warnings } = createPluginContext$1(context);
-            const isEntry = args.kind === "entry-point-run" || args.kind === "entry-point-build";
-            const result = await handler.call(mixedContext, args.path, isEntry ? void 0 : args.importer, { isEntry });
-            for (const warning of warnings) console.warn("[unplugin]", typeof warning === "string" ? warning : warning.message);
-            if (errors.length > 0) {
-              const errorMessage = errors.map((e) => typeof e === "string" ? e : e.message).join("\n");
-              throw new Error(`[unplugin] ${plugin.name}: ${errorMessage}`);
-            }
-            if (typeof result === "string") {
-              if (!isAbsolute2(result)) return {
-                path: result,
-                namespace: toBunNamespace(plugin.name)
-              };
-              return { path: result };
-            } else if (typeof result === "object" && result !== null) {
-              if (!isAbsolute2(result.id)) return {
-                path: result.id,
-                external: result.external,
-                namespace: toBunNamespace(plugin.name)
-              };
-              return {
-                path: result.id,
-                external: result.external
-              };
-            }
-          }
-        });
-        async function processLoadTransform(id, namespace, loader) {
-          let code;
-          let hasResult = false;
-          let activePlugin;
-          const namespaceLoadHooks = namespace === "file" ? loadHooks : loadHooks.filter((h) => h.plugin.name === namespace);
-          for (const { plugin, handler, filter } of namespaceLoadHooks) {
-            if (plugin.loadInclude && !plugin.loadInclude(id)) continue;
-            if (!filter(id)) continue;
-            const { mixedContext, errors, warnings } = createPluginContext$1(context);
-            const result = await handler.call(mixedContext, id);
-            for (const warning of warnings) console.warn("[unplugin]", typeof warning === "string" ? warning : warning.message);
-            if (errors.length > 0) {
-              const errorMessage = errors.map((e) => typeof e === "string" ? e : e.message).join("\n");
-              throw new Error(`[unplugin] ${plugin.name}: ${errorMessage}`);
-            }
-            if (typeof result === "string") {
-              code = result;
-              hasResult = true;
-              activePlugin = plugin;
-              break;
-            } else if (typeof result === "object" && result !== null) {
-              code = result.code;
-              hasResult = true;
-              activePlugin = plugin;
-              break;
-            }
-          }
-          if (!hasResult && namespace === "file" && transformHooks.length > 0) code = await Bun.file(id).text();
-          if (code !== void 0) {
-            const namespaceTransformHooks = namespace === "file" ? transformHooks : transformHooks.filter((h) => h.plugin.name === namespace);
-            for (const { plugin, handler, filter } of namespaceTransformHooks) {
-              if (plugin.transformInclude && !plugin.transformInclude(id)) continue;
-              if (!filter(id, code)) continue;
-              const { mixedContext, errors, warnings } = createPluginContext$1(context);
-              const result = await handler.call(mixedContext, code, id);
-              for (const warning of warnings) console.warn("[unplugin]", typeof warning === "string" ? warning : warning.message);
-              if (errors.length > 0) {
-                const errorMessage = errors.map((e) => typeof e === "string" ? e : e.message).join("\n");
-                throw new Error(`[unplugin] ${plugin.name}: ${errorMessage}`);
-              }
-              if (typeof result === "string") {
-                code = result;
-                hasResult = true;
-              } else if (typeof result === "object" && result !== null) {
-                code = result.code;
-                hasResult = true;
-              }
-            }
-          }
-          if (hasResult && code !== void 0) {
-            const pluginLoader = activePlugin?.bun?.loader;
-            return {
-              contents: code,
-              loader: (pluginLoader && unwrapLoader$1(pluginLoader, code, id)) ?? loader ?? guessLoader$1(id)
-            };
-          }
-        }
-        if (loadHooks.length || transformHooks.length) build2.onLoad({
-          filter: /.*/,
-          namespace: "file"
-        }, async (args) => {
-          return processLoadTransform(args.path, "file", args.loader);
-        });
-        for (const pluginName of virtualModulePlugins) build2.onLoad({
-          filter: /.*/,
-          namespace: toBunNamespace(pluginName)
-        }, async (args) => {
-          return processLoadTransform(args.path, pluginName, args.loader);
-        });
-        if (plugins.some((plugin) => plugin.buildEnd || plugin.writeBundle)) build2.onEnd(async () => {
-          for (const plugin of plugins) {
-            if (plugin.buildEnd) await plugin.buildEnd.call(context);
-            if (plugin.writeBundle) await plugin.writeBundle();
-          }
-        });
-      }
-    };
-  };
-}
-var ExtToLoader = {
-  ".js": "js",
-  ".mjs": "js",
-  ".cjs": "js",
-  ".jsx": "jsx",
-  ".ts": "ts",
-  ".cts": "ts",
-  ".mts": "ts",
-  ".tsx": "tsx",
-  ".css": "css",
-  ".less": "css",
-  ".stylus": "css",
-  ".scss": "css",
-  ".sass": "css",
-  ".json": "json",
-  ".txt": "text"
-};
-function guessLoader(code, id) {
-  return ExtToLoader[path.extname(id).toLowerCase()] || "js";
-}
-function unwrapLoader(loader, code, id) {
   if (typeof loader === "function") return loader(code, id);
   return loader;
 }
@@ -3173,20 +2970,31 @@ var nullSourceMap = {
   mappings: "",
   version: 3
 };
-function combineSourcemaps(filename, sourcemapList) {
+function combineSourcemaps(filename, sourcemapList, preserveSources = false) {
   sourcemapList = sourcemapList.filter((m) => m.sources);
   if (sourcemapList.length === 0 || sourcemapList.every((m) => m.sources.length === 0)) return { ...nullSourceMap };
   let map;
   let mapIndex = 1;
-  if (!sourcemapList.slice(0, -1).some((m) => m.sources.length !== 1)) map = remapping(sourcemapList, () => null, true);
-  else map = remapping(sourcemapList[0], (sourcefile) => {
-    if (sourcefile === filename && sourcemapList[mapIndex]) return sourcemapList[mapIndex++];
-    else return { ...nullSourceMap };
-  }, true);
+  if (!sourcemapList.slice(0, -1).some((m) => m.sources.length !== 1)) map = remapping(sourcemapList, () => null, !preserveSources);
+  else {
+    const normalizedFilename = filename.replace(/\\/g, "/");
+    const windows = /^[a-z]:\//i.test(normalizedFilename) || normalizedFilename.startsWith("//");
+    const paths = windows ? path.win32 : path.posix;
+    map = remapping(sourcemapList[0], (sourcefile) => {
+      let source = sourcefile.replace(/\\/g, "/");
+      if (preserveSources && source !== normalizedFilename && source.startsWith("file:")) try {
+        source = fileURLToPath(source, { windows }).replace(/\\/g, "/");
+      } catch {
+        return null;
+      }
+      if ((sourcefile === filename || preserveSources && (source === normalizedFilename || paths.isAbsolute(normalizedFilename) && (paths.isAbsolute(source) || !/^[a-z][a-z\d+.-]*:/i.test(source)) && paths.resolve(paths.dirname(normalizedFilename), source) === paths.normalize(normalizedFilename))) && sourcemapList[mapIndex]) return sourcemapList[mapIndex++];
+      else return preserveSources ? null : { ...nullSourceMap };
+    }, !preserveSources);
+  }
   if (!map.file) delete map.file;
   return map;
 }
-function createBuildContext3(build2) {
+function createBuildContext$1(build2) {
   const watchFiles = [];
   const { initialOptions } = build2;
   return {
@@ -3214,7 +3022,7 @@ function createBuildContext3(build2) {
     }
   };
 }
-function createPluginContext(context) {
+function createPluginContext$1(context) {
   const errors = [];
   const warnings = [];
   const pluginContext = {
@@ -3261,6 +3069,242 @@ function processCodeWithSourceMap(map, code) {
   }
   return code;
 }
+var ExtToLoader = {
+  ".js": "js",
+  ".mjs": "js",
+  ".cjs": "js",
+  ".jsx": "jsx",
+  ".ts": "ts",
+  ".cts": "ts",
+  ".mts": "ts",
+  ".tsx": "tsx",
+  ".css": "css",
+  ".less": "css",
+  ".stylus": "css",
+  ".scss": "css",
+  ".sass": "css",
+  ".json": "json",
+  ".txt": "text"
+};
+function guessLoader(id) {
+  return ExtToLoader[path.extname(id).toLowerCase()] || "js";
+}
+function unwrapLoader(loader, code, id) {
+  if (typeof loader === "function") return loader(code, id);
+  return loader;
+}
+function createBuildContext3(build2) {
+  const watchFiles = [];
+  return {
+    addWatchFile(file) {
+      watchFiles.push(file);
+    },
+    getWatchFiles() {
+      return watchFiles;
+    },
+    emitFile(emittedFile) {
+      const outFileName = emittedFile.fileName || emittedFile.name;
+      const outdir = build2?.config?.outdir;
+      if (outdir && emittedFile.source && outFileName) {
+        const outPath = path.resolve(outdir, outFileName);
+        const outDir = path.dirname(outPath);
+        if (!fs2.existsSync(outDir)) fs2.mkdirSync(outDir, { recursive: true });
+        fs2.writeFileSync(outPath, emittedFile.source);
+      }
+    },
+    parse,
+    getNativeBuildContext() {
+      return {
+        framework: "bun",
+        build: build2
+      };
+    }
+  };
+}
+function createPluginContext(buildContext) {
+  const errors = [];
+  const warnings = [];
+  return {
+    errors,
+    warnings,
+    mixedContext: {
+      ...buildContext,
+      error(error) {
+        errors.push(error);
+      },
+      warn(warning) {
+        warnings.push(warning);
+      }
+    }
+  };
+}
+function toBunNamespace(name) {
+  return name.replace(/[^\w$-]/g, "-");
+}
+function getBunPlugin(factory) {
+  return (userOptions) => {
+    if (typeof Bun === "undefined") throw new ReferenceError("Bun is not supported in this environment");
+    if (!Bun.semver.satisfies(Bun.version, ">=1.2.22")) throw new Error("Bun 1.2.22 or higher is required, please upgrade Bun");
+    const meta = {
+      framework: "bun",
+      versions: {
+        bun: Bun.version,
+        unplugin: version$1
+      }
+    };
+    const plugins = toArray(factory(userOptions, meta));
+    return {
+      name: (plugins.length === 1 ? plugins[0].name : meta.bunHostName) ?? `unplugin-host:${plugins.map((p) => p.name).join(":")}`,
+      async setup(build2) {
+        const context = createBuildContext3(build2);
+        for (const plugin of plugins) await plugin.bun?.setup?.(build2);
+        if (plugins.some((plugin) => plugin.buildStart)) build2.onStart(async () => {
+          for (const plugin of plugins) if (plugin.buildStart) await plugin.buildStart.call(context);
+        });
+        const resolveIdHooks = plugins.filter((plugin) => plugin.resolveId).map((plugin) => ({
+          plugin,
+          ...normalizeObjectHook("resolveId", plugin.resolveId)
+        }));
+        const loadHooks = plugins.filter((plugin) => plugin.load).map((plugin) => ({
+          plugin,
+          ...normalizeObjectHook("load", plugin.load)
+        }));
+        const transformHooks = plugins.filter((plugin) => plugin.transform || plugin.transformInclude).map((plugin) => ({
+          plugin,
+          ...normalizeObjectHook("transform", plugin.transform)
+        }));
+        const virtualModulePlugins = /* @__PURE__ */ new Set();
+        for (const plugin of plugins) if (plugin.resolveId && plugin.load) virtualModulePlugins.add(plugin.name);
+        if (resolveIdHooks.length) build2.onResolve({ filter: /.*/ }, async (args) => {
+          if (build2.config?.external?.includes(args.path)) return;
+          for (const { plugin, handler, filter } of resolveIdHooks) {
+            if (!filter(args.path)) continue;
+            const { mixedContext, errors, warnings } = createPluginContext(context);
+            const isEntry = args.kind === "entry-point-run" || args.kind === "entry-point-build";
+            const result = await handler.call(mixedContext, args.path, isEntry ? void 0 : args.importer, { isEntry });
+            for (const warning of warnings) console.warn("[unplugin]", typeof warning === "string" ? warning : warning.message);
+            if (errors.length > 0) {
+              const errorMessage = errors.map((e) => typeof e === "string" ? e : e.message).join("\n");
+              throw new Error(`[unplugin] ${plugin.name}: ${errorMessage}`);
+            }
+            if (typeof result === "string") {
+              if (!isAbsolute2(result)) return {
+                path: result,
+                namespace: toBunNamespace(plugin.name)
+              };
+              return { path: result };
+            } else if (typeof result === "object" && result !== null) {
+              if (!isAbsolute2(result.id)) return {
+                path: result.id,
+                external: result.external,
+                namespace: toBunNamespace(plugin.name)
+              };
+              return {
+                path: result.id,
+                external: result.external
+              };
+            }
+          }
+        });
+        async function processLoadTransform(id, namespace, loader) {
+          let code;
+          let hasResult = false;
+          let activePlugin;
+          const sourcemapResults = build2.config.sourcemap && build2.config.sourcemap !== "none" ? [] : void 0;
+          const namespaceLoadHooks = namespace === "file" ? loadHooks : loadHooks.filter((h) => h.plugin.name === namespace);
+          for (const { plugin, handler, filter } of namespaceLoadHooks) {
+            if (plugin.loadInclude && !plugin.loadInclude(id)) continue;
+            if (!filter(id)) continue;
+            const { mixedContext, errors, warnings } = createPluginContext(context);
+            const result = await handler.call(mixedContext, id);
+            for (const warning of warnings) console.warn("[unplugin]", typeof warning === "string" ? warning : warning.message);
+            if (errors.length > 0) {
+              const errorMessage = errors.map((e) => typeof e === "string" ? e : e.message).join("\n");
+              throw new Error(`[unplugin] ${plugin.name}: ${errorMessage}`);
+            }
+            if (typeof result === "string") {
+              code = result;
+              hasResult = true;
+              activePlugin = plugin;
+              break;
+            } else if (typeof result === "object" && result !== null) {
+              code = result.code;
+              sourcemapResults?.push(result);
+              hasResult = true;
+              activePlugin = plugin;
+              break;
+            }
+          }
+          if (!hasResult && namespace === "file" && transformHooks.length > 0) code = await Bun.file(id).text();
+          if (code !== void 0) {
+            const namespaceTransformHooks = namespace === "file" ? transformHooks : transformHooks.filter((h) => h.plugin.name === namespace);
+            for (const { plugin, handler, filter } of namespaceTransformHooks) {
+              if (plugin.transformInclude && !plugin.transformInclude(id)) continue;
+              if (!filter(id, code)) continue;
+              const { mixedContext, errors, warnings } = createPluginContext(context);
+              const result = await handler.call(mixedContext, code, id);
+              for (const warning of warnings) console.warn("[unplugin]", typeof warning === "string" ? warning : warning.message);
+              if (errors.length > 0) {
+                const errorMessage = errors.map((e) => typeof e === "string" ? e : e.message).join("\n");
+                throw new Error(`[unplugin] ${plugin.name}: ${errorMessage}`);
+              }
+              if (typeof result === "string") {
+                if (sourcemapResults && result !== code) sourcemapResults.length = 0;
+                code = result;
+                hasResult = true;
+              } else if (typeof result === "object" && result !== null) {
+                code = result.code;
+                sourcemapResults?.push(result);
+                hasResult = true;
+              }
+            }
+          }
+          if (hasResult && code !== void 0) {
+            const pluginLoader = activePlugin?.bun?.loader;
+            const resolvedLoader = (pluginLoader && unwrapLoader(pluginLoader, code, id)) ?? loader ?? guessLoader(id);
+            if (sourcemapResults && [
+              "js",
+              "jsx",
+              "ts",
+              "tsx"
+            ].includes(resolvedLoader)) {
+              const sourcemaps = [];
+              for (let i = sourcemapResults.length - 1; i >= 0; i--) {
+                const result = sourcemapResults[i];
+                const map = result.map;
+                if (map) sourcemaps.push(typeof map === "string" ? JSON.parse(map) : map);
+                else if (i > 0 && result.code !== sourcemapResults[i - 1].code) break;
+              }
+              if (sourcemaps.length) code = processCodeWithSourceMap(combineSourcemaps(id, sourcemaps, true), code);
+            }
+            return {
+              contents: code,
+              loader: resolvedLoader
+            };
+          }
+        }
+        if (loadHooks.length || transformHooks.length) build2.onLoad({
+          filter: /.*/,
+          namespace: "file"
+        }, async (args) => {
+          return processLoadTransform(args.path, "file", args.loader);
+        });
+        for (const pluginName of virtualModulePlugins) build2.onLoad({
+          filter: /.*/,
+          namespace: toBunNamespace(pluginName)
+        }, async (args) => {
+          return processLoadTransform(args.path, pluginName, args.loader);
+        });
+        if (plugins.some((plugin) => plugin.buildEnd || plugin.writeBundle)) build2.onEnd(async () => {
+          for (const plugin of plugins) {
+            if (plugin.buildEnd) await plugin.buildEnd.call(context);
+            if (plugin.writeBundle) await plugin.writeBundle();
+          }
+        });
+      }
+    };
+  };
+}
 function getEsbuildPlugin(factory) {
   return (userOptions) => {
     const meta = {
@@ -3297,6 +3341,7 @@ function getEsbuildPlugin(factory) {
           if (result?.contents) break;
         }
         let fsContentsCache;
+        let fsContentsCached = false;
         for (const { options, onTransformCb } of loaders) {
           if (!checkFilter(options)) continue;
           if (onTransformCb) {
@@ -3305,8 +3350,19 @@ function getEsbuildPlugin(factory) {
               ...args,
               async getContents() {
                 if (result?.contents) return result.contents;
-                if (fsContentsCache) return fsContentsCache;
-                return fsContentsCache = await fs2.promises.readFile(args.path, "utf8");
+                if (fsContentsCached) return fsContentsCache;
+                try {
+                  fsContentsCache = await fs2.promises.readFile(args.path, "utf8");
+                  fsContentsCached = true;
+                  return fsContentsCache;
+                } catch (error) {
+                  if (error?.code === "ENOENT") {
+                    fsContentsCache = "";
+                    fsContentsCached = true;
+                    return fsContentsCache;
+                  }
+                  throw error;
+                }
               }
             });
             if (_result?.contents) result = _result;
@@ -3324,11 +3380,11 @@ function getEsbuildPlugin(factory) {
 function buildSetup() {
   return (plugin) => {
     return (build2, rawBuild) => {
-      const context = createBuildContext3(rawBuild);
+      const context = createBuildContext$1(rawBuild);
       const { onStart, onEnd, onResolve, onLoad, onTransform, initialOptions } = build2;
       const onResolveFilter = plugin.esbuild?.onResolveFilter ?? /.*/;
       const onLoadFilter = plugin.esbuild?.onLoadFilter ?? /.*/;
-      const loader = plugin.esbuild?.loader ?? guessLoader;
+      const loader = plugin.esbuild?.loader ?? guessLoader$1;
       plugin.esbuild?.config?.call(context, initialOptions);
       if (plugin.buildStart) onStart(() => plugin.buildStart.call(context));
       if (plugin.buildEnd || plugin.writeBundle) onEnd(async () => {
@@ -3340,7 +3396,7 @@ function buildSetup() {
         if (initialOptions.external?.includes(id)) return;
         const { handler, filter } = normalizeObjectHook("resolveId", plugin.resolveId);
         if (!filter(id)) return;
-        const { errors, warnings, mixedContext } = createPluginContext(context);
+        const { errors, warnings, mixedContext } = createPluginContext$1(context);
         const isEntry = args.kind === "entry-point";
         const result = await handler.call(mixedContext, id, isEntry ? void 0 : args.importer, { isEntry });
         if (typeof result === "string") return {
@@ -3364,7 +3420,7 @@ function buildSetup() {
         const id = args.path + (args.suffix || "");
         if (plugin.loadInclude && !plugin.loadInclude(id)) return;
         if (!filter(id)) return;
-        const { errors, warnings, mixedContext } = createPluginContext(context);
+        const { errors, warnings, mixedContext } = createPluginContext$1(context);
         let code;
         let map;
         const result = await handler.call(mixedContext, id);
@@ -3381,7 +3437,7 @@ function buildSetup() {
           errors,
           warnings,
           watchFiles: mixedContext.getWatchFiles(),
-          loader: unwrapLoader(loader, code, args.path),
+          loader: unwrapLoader$1(loader, code, args.path),
           resolveDir
         };
       });
@@ -3391,7 +3447,7 @@ function buildSetup() {
         if (plugin.transformInclude && !plugin.transformInclude(id)) return;
         let code = await args.getContents();
         if (!filter(id, code)) return;
-        const { mixedContext, errors, warnings } = createPluginContext(context);
+        const { mixedContext, errors, warnings } = createPluginContext$1(context);
         const resolveDir = path.dirname(args.path);
         let map;
         const result = await handler.call(mixedContext, code, id);
@@ -3409,7 +3465,7 @@ function buildSetup() {
             errors,
             warnings,
             watchFiles: mixedContext.getWatchFiles(),
-            loader: unwrapLoader(loader, code, args.path),
+            loader: unwrapLoader$1(loader, code, args.path),
             resolveDir
           };
         }
@@ -3829,6 +3885,7 @@ function applyRspackPlugins(compiler, rawPlugins, meta) {
     });
     const externalModules = /* @__PURE__ */ new Set();
     if (plugin.resolveId) {
+      let cachedResolveId;
       const vfs = compiler.rspack.experiments.VirtualModulesPlugin ? new compiler.rspack.experiments.VirtualModulesPlugin() : new FakeVirtualModulesPlugin(plugin);
       vfs.apply(compiler);
       const vfsModules = /* @__PURE__ */ new Map();
@@ -3852,7 +3909,20 @@ function applyRspackPlugins(compiler, rawPlugins, meta) {
               console.warn(`unplugin/rspack: warning from resolveId hook: ${msg}`);
             }
           };
-          const { handler, filter } = normalizeObjectHook("resolveId", plugin.resolveId);
+          const hook = plugin.resolveId;
+          const cwd = process.cwd();
+          let handler;
+          if (cachedResolveId?.hook === hook && cachedResolveId.cwd === cwd) handler = typeof hook === "function" ? hook : hook.handler;
+          else {
+            const normalized = normalizeObjectHook("resolveId", hook);
+            handler = normalized.handler;
+            cachedResolveId = {
+              hook,
+              cwd,
+              filter: normalized.filter
+            };
+          }
+          const { filter } = cachedResolveId;
           if (!filter(id)) return;
           const resolveIdResult = await handler.call({
             ...context,
@@ -3882,27 +3952,32 @@ function applyRspackPlugins(compiler, rawPlugins, meta) {
         });
       });
     }
-    if (plugin.load) compiler.options.module.rules.unshift({
-      enforce: plugin.enforce,
-      include(id) {
-        if (isVirtualModuleId(id, plugin)) id = decodeVirtualModuleId(id, plugin);
-        if (plugin.loadInclude && !plugin.loadInclude(id)) return false;
-        const { filter } = normalizeObjectHook("load", plugin.load);
-        if (!filter(id)) return false;
-        return !externalModules.has(id);
-      },
-      use: [{
-        loader: LOAD_LOADER$1,
-        options: { plugin }
-      }],
-      type: "javascript/auto"
-    });
-    if (plugin.transform) compiler.options.module.rules.unshift({
-      enforce: plugin.enforce,
-      use(data) {
-        return transformUse(data, plugin, TRANSFORM_LOADER$1);
-      }
-    });
+    if (plugin.load) {
+      const filter = createCachedIdFilter(() => plugin.load);
+      compiler.options.module.rules.unshift({
+        enforce: plugin.enforce,
+        include(id) {
+          if (isVirtualModuleId(id, plugin)) id = decodeVirtualModuleId(id, plugin);
+          if (plugin.loadInclude && !plugin.loadInclude(id)) return false;
+          if (!filter(id)) return false;
+          return !externalModules.has(id);
+        },
+        use: [{
+          loader: LOAD_LOADER$1,
+          options: { plugin }
+        }],
+        type: "javascript/auto"
+      });
+    }
+    if (plugin.transform) {
+      const filter = createCachedIdFilter(() => plugin.transform);
+      compiler.options.module.rules.unshift({
+        enforce: plugin.enforce,
+        use(data) {
+          return transformUse(data, plugin, TRANSFORM_LOADER$1, filter);
+        }
+      });
+    }
     if (meta.framework === "rspack" && plugin.rspack) plugin.rspack(compiler);
     if (plugin.watchChange || plugin.buildStart) compiler.hooks.make.tapPromise(plugin.name, async (compilation) => {
       const context = createBuildContext(compiler, compilation);
@@ -3977,6 +4052,21 @@ function getVitePlugin(factory) {
 }
 var TRANSFORM_LOADER = resolve6(import.meta.dirname, "webpack/loaders/transform.mjs");
 var LOAD_LOADER = resolve6(import.meta.dirname, "webpack/loaders/load.mjs");
+function virtualInputFileSystem(compiler) {
+  let input = compiler.inputFileSystem;
+  while (input?._inputFileSystem) input = input._inputFileSystem;
+  return input;
+}
+function ensureVirtualModule(plugin, compiler, file) {
+  if (!file || !plugin.__vfs) return;
+  const resource = normalizeAbsolutePath(file.split("?")[0].split("#")[0]);
+  if (!resource.startsWith(plugin.__virtualModulePrefix)) return;
+  if (fs2.existsSync(resource)) return;
+  const input = virtualInputFileSystem(compiler);
+  if (input?._virtualFiles && Object.hasOwn(input._virtualFiles, resource)) return;
+  plugin.__vfs.writeModule(resource, "");
+  if (plugin.__vfsModules instanceof Set) plugin.__vfsModules.add(resource);
+}
 function getWebpackPlugin(factory) {
   return (userOptions) => {
     const VirtualModulesPlugin = __require("webpack-virtual-modules");
@@ -3998,14 +4088,19 @@ function getWebpackPlugin(factory) {
         });
         const externalModules = /* @__PURE__ */ new Set();
         if (plugin.resolveId) {
+          let cachedResolveId;
           let vfs = compiler.options.plugins.find((i) => i instanceof VirtualModulesPlugin);
           if (!vfs) {
             vfs = new VirtualModulesPlugin();
             compiler.options.plugins.push(vfs);
           }
-          const vfsModules = /* @__PURE__ */ new Set();
-          plugin.__vfsModules = vfsModules;
+          plugin.__vfsModules = /* @__PURE__ */ new Set();
           plugin.__vfs = vfs;
+          compiler.hooks.compilation.tap(plugin.name, (compilation) => {
+            compilation.hooks.buildModule.tap(plugin.name, (module) => {
+              ensureVirtualModule(plugin, compiler, module.resource);
+            });
+          });
           const resolverPlugin = { apply(resolver2) {
             const target = resolver2.ensureHook("resolve");
             resolver2.getHook("resolve").tapAsync(plugin.name, async (request, resolveContext, callback) => {
@@ -4036,7 +4131,20 @@ function getWebpackPlugin(factory) {
                   console.warn(`unplugin/webpack: warning from resolveId hook: ${msg}`);
                 }
               };
-              const { handler, filter } = normalizeObjectHook("resolveId", plugin.resolveId);
+              const hook = plugin.resolveId;
+              const cwd = process$1.cwd();
+              let handler;
+              if (cachedResolveId?.hook === hook && cachedResolveId.cwd === cwd) handler = typeof hook === "function" ? hook : hook.handler;
+              else {
+                const normalized = normalizeObjectHook("resolveId", hook);
+                handler = normalized.handler;
+                cachedResolveId = {
+                  hook,
+                  cwd,
+                  filter: normalized.filter
+                };
+              }
+              const { filter } = cachedResolveId;
               if (!filter(id)) return callback();
               const resolveIdResult = await handler.call({
                 ...context,
@@ -4048,10 +4156,7 @@ function getWebpackPlugin(factory) {
               if (typeof resolveIdResult === "string" ? false : resolveIdResult.external === true) externalModules.add(resolved);
               if (!fs2.existsSync(resolved)) {
                 resolved = normalizeAbsolutePath(plugin.__virtualModulePrefix + encodeURIComponent(resolved));
-                if (!vfsModules.has(resolved)) {
-                  plugin.__vfs.writeModule(resolved, "");
-                  vfsModules.add(resolved);
-                }
+                ensureVirtualModule(plugin, compiler, resolved);
               }
               const newRequest = {
                 ...request,
@@ -4063,23 +4168,29 @@ function getWebpackPlugin(factory) {
           compiler.options.resolve.plugins = compiler.options.resolve.plugins || [];
           compiler.options.resolve.plugins.push(resolverPlugin);
         }
-        if (plugin.load) compiler.options.module.rules.unshift({
-          include(id) {
-            return shouldLoad(id, plugin, externalModules);
-          },
-          enforce: plugin.enforce,
-          use: [{
-            loader: LOAD_LOADER,
-            options: { plugin }
-          }],
-          type: "javascript/auto"
-        });
-        if (plugin.transform) compiler.options.module.rules.unshift({
-          enforce: plugin.enforce,
-          use(data) {
-            return transformUse(data, plugin, TRANSFORM_LOADER);
-          }
-        });
+        if (plugin.load) {
+          const filter = createCachedIdFilter(() => plugin.load);
+          compiler.options.module.rules.unshift({
+            include(id) {
+              return shouldLoad(id, plugin, externalModules, filter);
+            },
+            enforce: plugin.enforce,
+            use: [{
+              loader: LOAD_LOADER,
+              options: { plugin }
+            }],
+            type: "javascript/auto"
+          });
+        }
+        if (plugin.transform) {
+          const filter = createCachedIdFilter(() => plugin.transform);
+          compiler.options.module.rules.unshift({
+            enforce: plugin.enforce,
+            use(data) {
+              return transformUse(data, plugin, TRANSFORM_LOADER, filter);
+            }
+          });
+        }
         if (plugin.webpack) plugin.webpack(compiler);
         if (plugin.watchChange || plugin.buildStart) compiler.hooks.make.tapPromise(plugin.name, async (compilation) => {
           const context = createBuildContext2(contextOptionsFromCompilation(compilation), compiler, compilation);
@@ -4091,9 +4202,20 @@ function getWebpackPlugin(factory) {
           }
           if (plugin.buildStart) return await plugin.buildStart.call(context);
         });
-        if (plugin.buildEnd) compiler.hooks.emit.tapPromise(plugin.name, async (compilation) => {
-          await plugin.buildEnd.call(createBuildContext2(contextOptionsFromCompilation(compilation), compiler, compilation));
-        });
+        if (plugin.buildEnd) {
+          const processAssetsStage = compiler.webpack?.Compilation?.PROCESS_ASSETS_STAGE_ADDITIONAL;
+          if (processAssetsStage == null) compiler.hooks.emit.tapPromise(plugin.name, async (compilation) => {
+            await plugin.buildEnd.call(createBuildContext2(contextOptionsFromCompilation(compilation), compiler, compilation));
+          });
+          else compiler.hooks.thisCompilation.tap(plugin.name, (compilation) => {
+            compilation.hooks.processAssets.tapPromise({
+              name: plugin.name,
+              stage: processAssetsStage
+            }, async () => {
+              await plugin.buildEnd.call(createBuildContext2(contextOptionsFromCompilation(compilation), compiler, compilation));
+            });
+          });
+        }
         if (plugin.writeBundle) compiler.hooks.afterEmit.tapPromise(plugin.name, async () => {
           await plugin.writeBundle();
         });
@@ -4101,10 +4223,9 @@ function getWebpackPlugin(factory) {
     } };
   };
 }
-function shouldLoad(id, plugin, externalModules) {
+function shouldLoad(id, plugin, externalModules, filter) {
   if (id.startsWith(plugin.__virtualModulePrefix)) id = decodeURIComponent(id.slice(plugin.__virtualModulePrefix.length));
   if (plugin.loadInclude && !plugin.loadInclude(id)) return false;
-  const { filter } = normalizeObjectHook("load", plugin.load);
   if (!filter(id)) return false;
   return !externalModules.has(id);
 }

@@ -1,0 +1,151 @@
+<template>
+	<!-- 单 view 根节点：flex 容器，default 插槽直通，子元素间距由容器 gap 天然实现 -->
+	<view :class="rootClass" :style="rootStyle">
+		<slot></slot>
+	</view>
+</template>
+
+<script setup lang="uts">
+	/**
+	 * 间距方向
+	 */
+	type SpaceDirection = 'horizontal' | 'vertical'
+
+	/**
+	 * 子元素对齐方式
+	 */
+	type SpaceAlign = 'start' | 'end' | 'center' | 'baseline'
+
+	/**
+	 * 间距大小项：number 补 px、string 原样
+	 */
+	type SpaceSize = number | string
+
+	type Props = {
+		/** 间距方向 */
+		direction?: SpaceDirection
+		/** 间距大小：number（补 px）/ string（原样）/ 数组 [横向, 纵向]（垂直方向取第一个值作主轴间距）；为空走主题默认 $m-space-size */
+		size?: SpaceSize | SpaceSize[] | null
+		/** 子元素对齐方式：未传时水平默认 center、垂直默认 stretch */
+		align?: SpaceAlign | null
+		/** 是否自动换行（仅水平方向生效） */
+		wrap?: boolean
+		/** 是否块级填充父元素 */
+		fill?: boolean
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		direction: 'horizontal',
+		size: null,
+		align: null,
+		wrap: false,
+		fill: false,
+		customClass: '',
+		customStyle: ''
+	})
+
+	/**
+	 * 间距值归一：number 补 px（如 20 → '20px'），string 原样返回
+	 */
+	function sizeValue(value: SpaceSize): string {
+		if (typeof value == 'number') return value.toString() + 'px'
+		return value
+	}
+
+	/**
+	 * 间距动态样式：
+	 * 单值 → gap 双向；数组 → 水平下 column-gap = 第一个值、row-gap = 第二个值 ?? 第一个值，
+	 * 垂直下 row-gap = 第一个值（第二个值忽略，Q2=A 定案）；未传返回空串走基类主题默认间距
+	 */
+	function buildGapStyle(): string {
+		const s = props.size
+		if (s == null) return ''
+		if (Array.isArray(s)) {
+			const arr = s as SpaceSize[]
+			const main = sizeValue(arr[0])
+			if (props.direction == 'vertical') return 'row-gap: ' + main + ';'
+			const cross = arr.length > 1 ? sizeValue(arr[1]) : main
+			return 'column-gap: ' + main + '; row-gap: ' + cross + ';'
+		}
+		return 'gap: ' + sizeValue(s) + ';'
+	}
+
+	/** 根节点类名：direction / align / wrap / fill 变体按 props 拼接（horizontal 未传 align 默认 center；vertical 未传不设由 --vertical 类走 stretch 默认） */
+	const rootClass = computed<string>(() => {
+		let cls = 'm-space'
+		if (props.direction == 'vertical') cls += ' m-space--vertical'
+		if (props.align != null) {
+			cls += ' m-space--align-' + (props.align as SpaceAlign)
+		} else if (props.direction == 'horizontal') {
+			cls += ' m-space--align-center'
+		}
+		if (props.wrap && props.direction == 'horizontal') cls += ' m-space--wrap'
+		if (props.fill) cls += ' m-space--fill'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 根节点动态样式：customStyle 补分号后拼接 size 生成的 gap 系样式 */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		style += buildGapStyle()
+		return style
+	})
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss，
+	 * uni.scss 注入机制与组件内引入同一文件会触发循环导入）。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 基类（横向 + 收缩贴合内容 + 默认间距） ========== */
+	.m-space {
+		flex-direction: row;
+		align-self: flex-start; /* 收缩宽度贴内容，fill 时覆盖为 stretch */
+		gap: $m-space-size;
+	}
+
+	/* ========== 方向变体（vertical 未传 align 时显式走 stretch 默认） ========== */
+	.m-space--vertical {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	/* ========== 换行变体（仅水平方向拼接） ========== */
+	.m-space--wrap {
+		flex-wrap: wrap;
+	}
+
+	/* ========== 填充变体（块级填充父元素，覆盖收缩） ========== */
+	.m-space--fill {
+		width: 100%;
+		align-self: stretch;
+	}
+
+	/* ========== 对齐变体（声明顺序在基类与方向类之后，覆盖生效） ========== */
+	.m-space--align-start {
+		align-items: flex-start;
+	}
+	.m-space--align-center {
+		align-items: center;
+	}
+	.m-space--align-end {
+		align-items: flex-end;
+	}
+	.m-space--align-baseline {
+		/* App 端 align-items 不支持 baseline，降级为首行起点对齐；Web 端保持 baseline 语义 */
+		align-items: flex-start;
+		/* #ifdef WEB */
+		align-items: baseline;
+		/* #endif */
+	}
+</style>

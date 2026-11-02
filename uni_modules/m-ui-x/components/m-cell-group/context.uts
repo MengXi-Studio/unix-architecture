@@ -1,0 +1,48 @@
+/**
+ * m-cell-group 与 m-cell 的组上下文（跨组件共享，独立 .uts）
+ *
+ * uvue 无 $children、ucss 无 :last-child，cell 无法感知组内末位；
+ * 由 group provide 本上下文，cell 在 setup 中同步注册自身 id、onUnmounted 注销，
+ * 组内末线（hairline）据此自动隐藏，cell 的 border prop 保留为手动开关兜底。
+ * class 实现：非蒸汽（Kotlin/Swift）端不支持「含方法的对象字面量 type」。
+ */
+import { reactive } from 'vue'
+
+/** provide / inject 配对 key（字符串 key，App 原生端无需 Symbol 支持） */
+export const CELL_GROUP_KEY: string = '__mxi_cell_group__'
+
+/** cell-group 注入上下文：维护组内已挂载 cell 的有序 id 集合 */
+export class CellGroupContext {
+	/** 组内 cell id 有序集合（reactive 数组，注册 / 注销自动触发 isLast 重算） */
+	ids: string[] = reactive<string[]>([])
+
+	/** 注册 cell（cell setup 中同步调用，注册顺序即渲染顺序，首帧即为正确末位） */
+	register(id: string): void {
+		this.ids.push(id)
+	}
+
+	/** 注销 cell（onUnmounted 调用，v-if / v-for 动态增删后末位自动重算） */
+	unregister(id: string): void {
+		const index = this.ids.indexOf(id)
+		if (index != -1) {
+			this.ids.splice(index, 1)
+		}
+	}
+
+	/** 判断 id 是否为组内末位（ids 非空且为末元素） */
+	isLast(id: string): boolean {
+		if (this.ids.length == 0) {
+			return false
+		}
+		return this.ids[this.ids.length - 1] == id
+	}
+}
+
+/** cell id 自增计数器（模块级） */
+let cellIdCounter = 0
+
+/** 生成全局唯一 cell id（cell setup 中调用一次） */
+export function generateCellId(): string {
+	cellIdCounter++
+	return 'mxi_cell_' + cellIdCounter
+}

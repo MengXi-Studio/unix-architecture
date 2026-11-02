@@ -1,0 +1,334 @@
+<template>
+	<view :class="cellClass" :style="rootStyle" :hover-class="hoverClass" @click="handleClick">
+		<!-- 左图标区：icon prop 渲染 m-icon，颜色经 custom-class 落在 text 类（主题变量联动） -->
+		<view v-if="hasIcon" class="m-cell__left-icon">
+			<slot name="icon">
+				<m-icon :name="iconName" size="16" custom-class="m-cell__icon-text" />
+			</slot>
+		</view>
+		<!-- 标题区：标题行（必填星号 + title 插槽兜底文字）+ label 描述 -->
+		<view class="m-cell__title-wrap">
+			<view class="m-cell__title">
+				<text v-if="props.required" class="m-cell__required">*</text>
+				<slot name="title">
+					<text v-if="props.title != ''" :class="titleTextClass" :style="titleTextStyle">{{ props.title }}</text>
+				</slot>
+			</view>
+			<slot name="label">
+				<text v-if="props.label != ''" :class="labelTextClass">{{ props.label }}</text>
+			</slot>
+		</view>
+		<!-- 值区：右对齐，title 区与 value 区均 flex:1 -->
+		<view class="m-cell__value">
+			<slot name="value">
+				<text v-if="props.value != ''" :class="valueTextClass">{{ props.value }}</text>
+			</slot>
+		</view>
+		<!-- extra 插槽：右侧扩展内容（位于 value 与右图标之间） -->
+		<slot name="extra"></slot>
+		<!-- 右侧箭头：m-icon arrow 经容器旋转支持四向 -->
+		<view v-if="props.isLink" :class="arrowClass">
+			<m-icon name="arrow" size="16" custom-class="m-cell__arrow-text" />
+		</view>
+		<!-- 0.5px 分隔线：绝对定位单线 scaleY(0.5)，组内末线自动隐藏 -->
+		<view v-if="showLine" class="m-cell__line"></view>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { IconName } from '../m-icon/icons.uts'
+	import { CELL_GROUP_KEY, CellGroupContext, generateCellId } from '../m-cell-group/context.uts'
+
+	/** 单元格尺寸：normal 常规 / large 大 */
+	type CellSize = 'normal' | 'large'
+	/** 箭头方向 */
+	type CellArrowDirection = 'left' | 'up' | 'down' | 'right'
+
+	type Props = {
+		/** 左侧标题 */
+		title?: string
+		/** 右侧内容文字 */
+		value?: string
+		/** 标题下方描述文字 */
+		label?: string
+		/** 尺寸 */
+		size?: CellSize
+		/** 左侧图标名称（IconName 联合类型，null 表示无图标） */
+		icon?: IconName | null
+		/** 是否显示分隔线（组内末线自动隐藏，手动传 false 可强制关闭） */
+		border?: boolean
+		/** 内容是否垂直居中 */
+		center?: boolean
+		/** 是否展示点击反馈（默认取 isLink 值；显式设置后以本值为准） */
+		clickable?: boolean | null
+		/** 是否展示右侧箭头 */
+		isLink?: boolean
+		/** 箭头方向 */
+		arrowDirection?: CellArrowDirection
+		/** 是否展示必填星号 */
+		required?: boolean
+		/** 标题文字自定义内联样式 */
+		titleStyle?: string
+		/** 标题文字自定义类名 */
+		titleClass?: string
+		/** 值文字自定义类名 */
+		valueClass?: string
+		/** 描述文字自定义类名 */
+		labelClass?: string
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		title: '',
+		value: '',
+		label: '',
+		size: 'normal',
+		icon: null,
+		border: true,
+		center: false,
+		clickable: null,
+		isLink: false,
+		arrowDirection: 'right',
+		required: false,
+		titleStyle: '',
+		titleClass: '',
+		valueClass: '',
+		labelClass: '',
+		customClass: '',
+		customStyle: ''
+	})
+
+	const emit = defineEmits<{ click: [event: MouseEvent] }>()
+
+	/** 是否渲染左图标区 */
+	const hasIcon = computed<boolean>(() => {
+		return props.icon != null
+	})
+
+	/** 左图标名（hasIcon 为 true 时才渲染，断言安全） */
+	const iconName = computed<IconName>(() => {
+		return props.icon as IconName
+	})
+
+	/**
+	 * 点击事件透传：向父组件派发原生 click 事件（无条件触发，不做 clickable 拦截）
+	 */
+	function handleClick(event: MouseEvent) {
+		emit('click', event)
+	}
+
+	/** 组上下文：在 cell-group 内时注入（setup 同步注册，首帧即为正确末位） */
+	const groupContext = inject<CellGroupContext | null>(CELL_GROUP_KEY, null)
+	const cellId = generateCellId()
+	if (groupContext != null) {
+		groupContext.register(cellId)
+	}
+	onUnmounted(() => {
+		if (groupContext != null) {
+			groupContext.unregister(cellId)
+		}
+	})
+
+	/** 分隔线显隐：border 关闭时不显示；组内由注册上下文自动隐藏末线；独立使用时默认显示 */
+	const showLine = computed<boolean>(() => {
+		if (!props.border) return false
+		if (groupContext == null) return true
+		return !groupContext.isLast(cellId)
+	})
+
+	/** 是否展示点击反馈：clickable 显式设置时以之为准，否则跟随 isLink */
+	const isClickable = computed<boolean>(() => {
+		if (props.clickable != null) return props.clickable
+		return props.isLink
+	})
+
+	/** 按压态类名：由 view 的 hover-class 在按压期间挂载（"none" 为官方约定的无点击态值） */
+	const hoverClass = computed<string>(() => {
+		return isClickable.value ? 'm-cell--active' : 'none'
+	})
+
+	/** 根节点类名：BEM 变体类按 props 状态组合 */
+	const cellClass = computed<string>(() => {
+		let cls = 'm-cell'
+		if (props.size == 'large') cls += ' m-cell--large'
+		if (props.center) cls += ' m-cell--center'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 根节点内联样式：customStyle 补分号 */
+	const rootStyle = computed<string>(() => {
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		return style
+	})
+
+	/** 标题文字类名：默认类 + large 变体 + 用户 titleClass */
+	const titleTextClass = computed<string>(() => {
+		let cls = 'm-cell__title-text'
+		if (props.size == 'large') cls += ' m-cell__title-text--large'
+		if (props.titleClass != '') cls += ' ' + props.titleClass
+		return cls
+	})
+
+	/** 描述文字类名：默认类 + large 变体 + 用户 labelClass */
+	const labelTextClass = computed<string>(() => {
+		let cls = 'm-cell__label-text'
+		if (props.size == 'large') cls += ' m-cell__label-text--large'
+		if (props.labelClass != '') cls += ' ' + props.labelClass
+		return cls
+	})
+
+	/** 值文字类名：默认类 + 用户 valueClass */
+	const valueTextClass = computed<string>(() => {
+		let cls = 'm-cell__value-text'
+		if (props.valueClass != '') cls += ' ' + props.valueClass
+		return cls
+	})
+
+	/** 标题动态样式：titleStyle 补分号 */
+	const titleTextStyle = computed<string>(() => {
+		if (props.titleStyle == '') return ''
+		let style = props.titleStyle
+		if (!style.endsWith(';')) style += ';'
+		return style
+	})
+
+	/** 箭头容器类名：方向旋转（默认右向无旋转） */
+	const arrowClass = computed<string>(() => {
+		let cls = 'm-cell__arrow'
+		if (props.arrowDirection == 'up') cls += ' m-cell__arrow--up'
+		else if (props.arrowDirection == 'down') cls += ' m-cell__arrow--down'
+		else if (props.arrowDirection == 'left') cls += ' m-cell__arrow--left'
+		return cls
+	})
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），用户零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss，
+	 * uni.scss 注入机制与组件内引入同一文件会触发循环导入）。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 根节点 ========== */
+	.m-cell {
+		position: relative;
+		flex-direction: row;
+		align-items: flex-start;
+		width: 100%;
+		padding: $m-cell-vertical-padding $m-cell-horizontal-padding;
+		background-color: $m-cell-background;
+	}
+	.m-cell--large {
+		padding-top: $m-cell-large-vertical-padding;
+		padding-bottom: $m-cell-large-vertical-padding;
+	}
+	.m-cell--center {
+		align-items: center;
+	}
+	/* ========== 按压态（hover-class 按压期间挂载） ========== */
+	.m-cell--active {
+		background-color: $m-cell-active-color;
+	}
+
+	/* ========== 左图标（容器高与标题行高一致，图标垂直居中对齐标题） ========== */
+	.m-cell__left-icon {
+		justify-content: center;
+		align-items: center;
+		margin-right: $m-cell-icon-margin;
+		height: $m-cell-line-height;
+	}
+	.m-cell__icon-text {
+		color: $m-cell-text-color;
+	}
+
+	/* ========== 标题区（标题行 + label 描述，纵向排列） ========== */
+	.m-cell__title-wrap {
+		flex: 1;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.m-cell__title {
+		flex-direction: row;
+		align-items: center;
+	}
+	.m-cell__required {
+		margin-right: 2px;
+		color: $m-cell-required-color;
+	}
+	.m-cell__title-text {
+		font-size: $m-cell-font-size;
+		line-height: $m-cell-line-height;
+		color: $m-cell-text-color;
+		lines: 1;
+		text-overflow: ellipsis;
+	}
+	.m-cell__title-text--large {
+		font-size: $m-cell-large-title-font-size;
+	}
+	.m-cell__label-text {
+		margin-top: $m-cell-label-margin-top;
+		font-size: $m-cell-label-font-size;
+		line-height: $m-cell-label-line-height;
+		color: $m-cell-label-color;
+		lines: 1;
+		text-overflow: ellipsis;
+	}
+	.m-cell__label-text--large {
+		font-size: $m-cell-large-label-font-size;
+	}
+
+	/* ========== 值区（右对齐，与标题首行同行） ========== */
+	.m-cell__value {
+		flex: 1;
+		flex-direction: row;
+		justify-content: flex-end;
+		align-items: center;
+		overflow: hidden;
+	}
+	.m-cell__value-text {
+		font-size: $m-cell-font-size;
+		line-height: $m-cell-line-height;
+		color: $m-cell-value-color;
+		lines: 1;
+		text-overflow: ellipsis;
+	}
+
+	/* ========== 右侧箭头（容器旋转四向，颜色落在 m-icon 的 text 类上） ========== */
+	.m-cell__arrow {
+		justify-content: center;
+		align-items: center;
+		margin-left: $m-cell-arrow-margin;
+		height: $m-cell-line-height;
+	}
+	.m-cell__arrow--up {
+		transform: rotate(-90deg);
+	}
+	.m-cell__arrow--down {
+		transform: rotate(90deg);
+	}
+	.m-cell__arrow--left {
+		transform: rotate(180deg);
+	}
+	.m-cell__arrow-text {
+		color: $m-cell-right-icon-color;
+	}
+
+	/* ========== 0.5px 分隔线（绝对定位单线，scaleY 减半、左下角原点保持贴底） ========== */
+	.m-cell__line {
+		position: absolute;
+		bottom: 0;
+		left: $m-cell-horizontal-padding;
+		right: 0;
+		height: 1px;
+		background-color: $m-cell-border-color;
+		transform: scaleY(0.5);
+		transform-origin: 0 100%;
+	}
+</style>

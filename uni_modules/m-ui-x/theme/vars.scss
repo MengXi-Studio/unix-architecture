@@ -1,0 +1,113 @@
+/**
+ * unix-ui 主题变量
+ *
+ * 使用方式：
+ * 1. 默认主题：零配置，组件内部已顶层引入本文件（全部 !default），无需任何设置
+ * 2. 主题覆盖：在项目根 uni.scss 中直接定义同名变量即可：
+ *    $m-color-primary: #007aff;
+ *    注意：不要在 uni.scss 中 @import 本文件——uni.scss 会注入每个组件样式，
+ *    与组件内部引入同一文件会触发 sass 循环导入（This file is already being loaded）
+ * 3. !default 语义保证用户定义值优先于本文件默认值，与注入先后顺序无关
+ */
+/* ========== 主题色 ========== */
+$m-color-primary: #1989fa !default;
+$m-color-success: #07c160 !default;
+$m-color-warning: #ff976a !default;
+$m-color-danger: #ee0a24 !default;
+$m-white: #ffffff !default;
+$m-text-color: #323233 !default;
+$m-disabled-opacity: 0.5 !default;
+
+/* ========== 基础规格 ========== */
+$m-border-width: 1px !default;
+$m-radius-md: 8px !default;
+$m-radius-max: 999px !default;
+
+/* ========== Button 按钮 ========== */
+$m-button-mini-height: 24px !default;
+$m-button-small-height: 32px !default;
+$m-button-normal-height: 44px !default;
+$m-button-large-height: 50px !default;
+$m-button-mini-padding: 0 8px !default;
+$m-button-small-padding: 0 11px !default;
+$m-button-normal-padding: 0 15px !default;
+$m-button-large-padding: 0 24px !default;
+$m-button-mini-font-size: 12px !default;
+$m-button-small-font-size: 14px !default;
+$m-button-normal-font-size: 16px !default;
+$m-button-large-font-size: 18px !default;
+/* 最小宽度兜底短文本按钮，避免内容宽度差异导致布局不一致；large 无独立变量（其全宽语义由 block 承担，共用 normal 兜底） */
+$m-button-mini-min-width: 50px !default;
+$m-button-small-min-width: 60px !default;
+$m-button-normal-min-width: 76px !default;
+$m-button-radius: $m-radius-md !default;
+$m-button-icon-size: 20px !default;
+$m-button-active-opacity: 0.8 !default;
+
+/* ========== 通用类型背景色（default 类型使用） ========== */
+$m-color-default-bg: $m-white !default;
+$m-color-default-border: #ebedf0 !default;
+
+/* ========== Loading 加载 ========== */
+$m-loading-spinner-size: 30px !default;
+$m-loading-spinner-color: #c8c9cc !default;
+$m-loading-text-color: #646566 !default;
+$m-loading-text-font-size: 14px !default;
+$m-loading-text-gap: 4px !default;
+
+/* ========== Badge 徽标 ========== */
+$m-badge-height: 16px !default;
+$m-badge-color: $m-white !default;
+$m-badge-bg: $m-color-danger !default;
+$m-badge-font-size: 12px !default;
+$m-badge-font-weight: bold !default;
+$m-badge-padding: 0 3px !default;
+$m-badge-min-width: 16px !default;
+$m-badge-dot-size: 8px !default;
+$m-badge-dot-bg: $m-color-danger !default;
+
+/* ========== Cell 单元格 ========== */
+$m-cell-font-size: 14px !default;
+$m-cell-line-height: 24px !default;
+$m-cell-vertical-padding: 10px !default;
+$m-cell-horizontal-padding: 16px !default;
+$m-cell-text-color: $m-text-color !default;
+$m-cell-background: $m-white !default;
+$m-cell-border-color: #ebedf0 !default;
+$m-cell-active-color: #f2f3f5 !default;
+$m-cell-required-color: $m-color-danger !default;
+$m-cell-label-color: #969799 !default;
+$m-cell-label-font-size: 12px !default;
+$m-cell-label-line-height: 18px !default;
+$m-cell-label-margin-top: 4px !default;
+$m-cell-value-color: #969799 !default;
+$m-cell-icon-margin: 8px !default;
+$m-cell-arrow-margin: 4px !default;
+$m-cell-right-icon-color: #c8c9cc !default;
+$m-cell-large-vertical-padding: 12px !default;
+$m-cell-large-title-font-size: 16px !default;
+$m-cell-large-label-font-size: 14px !default;
+
+/* ========== CellGroup 单元格组 ========== */
+$m-cell-group-background: $m-white !default;
+$m-cell-group-title-color: #969799 !default;
+$m-cell-group-title-padding: 16px 16px 8px !default;
+$m-cell-group-title-font-size: 14px !default;
+$m-cell-group-title-line-height: 16px !default;
+$m-cell-group-inset-radius: $m-radius-md !default;
+$m-cell-group-inset-padding: 0 16px !default;
+
+/* ========== Image 图片 ========== */
+$m-image-background: #f7f8fa !default;   /* 加载 / 失败占位背景 */
+$m-image-icon-color: #dcdee0 !default;   /* 占位图标色 */
+
+/* ========== Text 文本 ========== */
+$m-text-font-size-sm: 12px !default;         /* small 档字号 */
+$m-text-font-size-md: 14px !default;         /* medium 档字号（基准档） */
+$m-text-font-size-lg: 16px !default;         /* large 档字号 */
+$m-text-color-secondary: #646566 !default;   /* secondary 次要文本色 */
+$m-text-color-tertiary: #969799 !default;    /* tertiary 三级文本色 */
+$m-text-color-fourth: #c8c9cc !default;      /* fourth 四级文本色 */
+
+/* ========== Space 间距 ========== */
+$m-space-size: 8px !default;                 /* 默认间距（未传 size 时） */

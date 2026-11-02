@@ -1,0 +1,347 @@
+<template>
+	<view :class="buttonClass" :style="rootStyle" :hover-class="hoverClass" @click="handleClick">
+		<!-- 0.5px 细边框层：ucss 无伪元素，用绝对定位 view 承载 1px 边框后 scale(0.5) 实现 -->
+		<view v-if="props.hairline" :class="hairlineClass" :style="hairlineStyle"></view>
+		<!-- 加载图标：复用 m-loading 组件（形态与动画实现收敛于该组件），size 100% 撑满定尺寸外框 -->
+		<view v-if="props.loading" class="m-button__loading-box">
+			<m-loading :type="props.loadingType" :color="loadingColor" size="100%" />
+		</view>
+		<!-- 按钮内容：加载中显示 loadingText，否则渲染默认插槽 -->
+		<text v-if="props.loading && props.loadingText != ''" :class="textClass">{{ props.loadingText }}</text>
+		<text v-else-if="!props.loading" :class="textClass"><slot></slot></text>
+	</view>
+</template>
+
+<script setup lang="uts">
+	import { LoadingType } from '../m-loading/loading.uts'
+
+	/** 按钮类型：default 默认 / primary 主要 / success 成功 / warning 警告 / danger 危险 */
+	type ButtonType = 'default' | 'primary' | 'success' | 'warning' | 'danger'
+	/** 按钮尺寸：large 大 / normal 常规 / small 小 / mini 迷你 */
+	type ButtonSize = 'large' | 'normal' | 'small' | 'mini'
+
+	type Props = {
+		/** 按钮类型 */
+		type?: ButtonType
+		/** 按钮尺寸 */
+		size?: ButtonSize
+		/** 朴素按钮：文字与边框使用主题色，背景为白色 */
+		plain?: boolean
+		/** 圆形按钮（全圆角） */
+		round?: boolean
+		/** 方形按钮（无圆角） */
+		square?: boolean
+		/** 是否禁用：禁用时不触发 click 事件 */
+		disabled?: boolean
+		/** 是否使用 0.5px 细边框 */
+		hairline?: boolean
+		/** 是否为块级元素（宽度撑满父容器） */
+		block?: boolean
+		/** 是否处于加载状态：加载中不触发 click 事件并隐藏插槽内容 */
+		loading?: boolean
+		/** 加载状态提示文字，为空时仅显示加载图标 */
+		loadingText?: string
+		/** 加载图标类型 */
+		loadingType?: LoadingType
+		/** 自定义颜色，支持 #hex 与 linear-gradient 渐变 */
+		color?: string
+		/** 自定义根节点类名 */
+		customClass?: string.ClassString
+		/** 自定义根节点内联样式 */
+		customStyle?: string
+	}
+
+	const props = withDefaults(defineProps<Props>(), {
+		type: 'default',
+		size: 'normal',
+		plain: false,
+		round: false,
+		square: false,
+		disabled: false,
+		hairline: false,
+		block: false,
+		loading: false,
+		loadingText: '',
+		loadingType: 'circular',
+		color: '',
+		customClass: '',
+		customStyle: ''
+	})
+
+	const emit = defineEmits<{ click: [event: MouseEvent] }>()
+
+	/**
+	 * 加载图标颜色：实色按钮为白图标、朴素 + 自定义色用色值（inline 传递）、其余随按钮类型走语义色名
+	 * （语义色名由 m-loading 编译期绑定 $m-color-* 主题变量，用户覆盖 uni.scss 变量即生效）
+	 */
+	const loadingColor = computed<string>(() => {
+		if (props.color != '') return props.plain ? props.color : 'white'
+		if (!props.plain && props.type != 'default') return 'white'
+		return props.type
+	})
+
+	/**
+	 * 点击事件处理
+	 * 禁用或加载中不触发
+	 */
+	function handleClick(event: MouseEvent) {
+		if (props.disabled || props.loading) return
+		emit('click', event)
+	}
+
+	/** 根节点类名：BEM 变体类按 props 状态组合 */
+	const buttonClass = computed<string>(() => {
+		let cls = 'm-button m-button--' + props.type
+		if (props.size != 'normal') cls += ' m-button--' + props.size
+		if (props.plain) cls += ' m-button--plain'
+		if (props.hairline) cls += ' m-button--hairline'
+		if (props.square) cls += ' m-button--square'
+		if (props.round) cls += ' m-button--round'
+		if (props.block) cls += ' m-button--block'
+		if (props.disabled) cls += ' m-button--disabled'
+		if (props.loading) cls += ' m-button--loading'
+		if (props.color != '') cls += ' m-button--colored'
+		if (props.customClass != '') cls += ' ' + props.customClass
+		return cls
+	})
+
+	/** 根节点动态样式：customStyle + 自定义颜色时的背景与边框 */
+	const rootStyle = computed<string>(() => {
+		// 自定义样式补分号，避免与动态样式拼接粘连
+		let style = props.customStyle
+		if (style != '' && !style.endsWith(';')) style += ';'
+		if (props.color == '') return style
+		if (props.plain) {
+			// 朴素按钮：仅边框使用自定义颜色，背景保持白色
+			style += 'border-color: ' + props.color + ';'
+		} else if (props.color.indexOf('linear-gradient') == 0) {
+			// 渐变色只能作为背景图渲染，边框透明
+			style += 'background-image: ' + props.color + '; border-color: transparent;'
+		} else {
+			style += 'background-color: ' + props.color + '; border-color: ' + props.color + ';'
+		}
+		return style
+	})
+
+	/** 文字类名：字号随尺寸、颜色随类型 / 朴素 / 自定义色切换；加载文案追加与图标的间距类 */
+	const textClass = computed<string>(() => {
+		let cls = 'm-button__text m-button__text--' + props.size
+		if (props.color != '') {
+			// 自定义颜色：实色为白字，朴素由 textStyle 动态控制颜色
+			cls += props.plain ? ' m-button__text--colored-plain' : ' m-button__text--white'
+		} else if (!props.plain && props.type != 'default') {
+			// 实色主题按钮为白字
+			cls += ' m-button__text--white'
+		} else {
+			// default 类型与朴素按钮使用类型主题色
+			cls += ' m-button__text--' + props.type
+		}
+		// 加载文案与图标的间距收在文字侧（margin-left），无文案时图标单独居中不受 margin 偏移
+		if (props.loading && props.loadingText != '') cls += ' m-button__text--loading'
+		return cls
+	})
+
+	/** 文字动态样式：自定义颜色 + 朴素时文字使用自定义颜色 */
+	const textStyle = computed<string>(() => {
+		if (props.color != '' && props.plain) return 'color: ' + props.color + ';'
+		return ''
+	})
+
+	/** 细边框层类名：圆角随 square / round、颜色随类型切换 */
+	const hairlineClass = computed<string>(() => {
+		let cls = 'm-button__hairline'
+		if (props.square) cls += ' m-button__hairline--square'
+		else if (props.round) cls += ' m-button__hairline--round'
+		if (props.color != '') return cls + ' m-button__hairline--colored'
+		return cls + ' m-button__hairline--' + props.type
+	})
+
+	/** 细边框层动态样式：自定义颜色时边框使用自定义颜色 */
+	const hairlineStyle = computed<string>(() => {
+		if (props.color == '') return ''
+		return 'border-color: ' + props.color + ';'
+	})
+
+	/** 按压态类名：由 view 的 hover-class 在按压期间挂载；禁用或加载中不出现点击态（"none" 为官方约定的无点击态值） */
+	const hoverClass = computed<string>(() => {
+		if (props.disabled || props.loading) return 'none'
+		return 'm-button--active'
+	})
+</script>
+
+<style lang="scss">
+	/*
+	 * 主题变量说明（默认主题内置 + 变量覆盖）：
+	 * 组件内顶层引入 theme/vars.scss（全部 !default），用户零配置即有默认主题；
+	 * 覆盖方式：项目根 uni.scss 直接定义 $m-* 变量（禁止 @import vars.scss——
+	 * uni.scss 会注入每个组件样式，与组件内引入同一文件将触发循环导入）。
+	 * !default 语义保证用户定义值优先于默认值，与注入先后顺序无关。
+	 */
+	@import '../../theme/vars.scss';
+
+	/* ========== 根节点 ========== */
+	.m-button {
+		position: relative;
+		flex-direction: row;
+		align-items: center;
+		justify-content: center;
+		height: $m-button-normal-height;
+		min-width: $m-button-normal-min-width;
+		padding: $m-button-normal-padding;
+		border-width: $m-border-width;
+		border-style: solid;
+		border-radius: $m-button-radius;
+		overflow: hidden;
+		/* #ifdef WEB */
+		cursor: pointer;
+		/* #endif */
+	}
+
+	/* ========== 尺寸 ========== */
+	.m-button--mini {
+		height: $m-button-mini-height;
+		min-width: $m-button-mini-min-width;
+		padding: $m-button-mini-padding;
+	}
+	.m-button--small {
+		height: $m-button-small-height;
+		min-width: $m-button-small-min-width;
+		padding: $m-button-small-padding;
+	}
+	.m-button--large {
+		height: $m-button-large-height;
+		padding: $m-button-large-padding;
+	}
+
+	/* ========== 类型（背景与边框同色，视觉上无边框） ========== */
+	.m-button--default {
+		background-color: $m-color-default-bg;
+		border-color: $m-color-default-border;
+	}
+	.m-button--primary {
+		background-color: $m-color-primary;
+		border-color: $m-color-primary;
+	}
+	.m-button--success {
+		background-color: $m-color-success;
+		border-color: $m-color-success;
+	}
+	.m-button--warning {
+		background-color: $m-color-warning;
+		border-color: $m-color-warning;
+	}
+	.m-button--danger {
+		background-color: $m-color-danger;
+		border-color: $m-color-danger;
+	}
+
+	/* ========== 形态变体 ========== */
+	.m-button--plain {
+		background-color: $m-white;
+	}
+	.m-button--hairline {
+		/* 0.5px 边框由 __hairline 层承载，根节点 1px 边框清零，避免叠加出双线 */
+		border-width: 0;
+	}
+	.m-button--square {
+		border-radius: 0;
+	}
+	.m-button--round {
+		border-radius: $m-radius-max;
+	}
+	.m-button--block {
+		align-self: stretch;
+	}
+	.m-button--disabled {
+		opacity: $m-disabled-opacity;
+	}
+
+	/* ========== 按压态（hover-class 按压期间挂载） ========== */
+	.m-button--active {
+		opacity: $m-button-active-opacity;
+	}
+
+	/* ========== 文字 ========== */
+	.m-button__text {
+		font-weight: 500;
+		line-height: 1.2;
+	}
+	.m-button__text--mini {
+		font-size: $m-button-mini-font-size;
+	}
+	.m-button__text--small {
+		font-size: $m-button-small-font-size;
+	}
+	.m-button__text--normal {
+		font-size: $m-button-normal-font-size;
+	}
+	.m-button__text--large {
+		font-size: $m-button-large-font-size;
+	}
+	.m-button__text--white {
+		color: $m-white;
+	}
+	.m-button__text--default {
+		color: $m-text-color;
+	}
+	.m-button__text--primary {
+		color: $m-color-primary;
+	}
+	.m-button__text--success {
+		color: $m-color-success;
+	}
+	.m-button__text--warning {
+		color: $m-color-warning;
+	}
+	.m-button__text--danger {
+		color: $m-color-danger;
+	}
+
+	/* ========== 加载图标外框（尺寸承载主题变量，图标由 m-loading 100% 撑满） ========== */
+	.m-button__loading-box {
+		width: $m-button-icon-size;
+		height: $m-button-icon-size;
+	}
+	/* 加载文案与图标的间距（收在文字侧，避免无文案时图标因 margin 偏离中心） */
+	.m-button__text--loading {
+		margin-left: 6px;
+	}
+
+	/* ========== 0.5px 细边框层 ========== */
+	.m-button__hairline {
+		position: absolute;
+		top: 0;
+		left: 0;
+		/* 尺寸取父容器 200%，以左上角为原点 scale(0.5) 后恰好铺满父容器，1px 边框视觉减半 */
+		width: 200%;
+		height: 200%;
+		border-width: $m-border-width;
+		border-style: solid;
+		/* 元素为父容器两倍大，圆角需同步两倍（缩放后与根节点圆角对齐） */
+		border-radius: $m-button-radius * 2;
+		transform: scale(0.5);
+		/* 默认中心原点缩放会偏移半个按钮，必须以左上角为原点 */
+		transform-origin: 0 0;
+	}
+	.m-button__hairline--square {
+		border-radius: 0;
+	}
+	.m-button__hairline--round {
+		border-radius: $m-radius-max;
+	}
+	.m-button__hairline--default {
+		border-color: $m-color-default-border;
+	}
+	.m-button__hairline--primary {
+		border-color: $m-color-primary;
+	}
+	.m-button__hairline--success {
+		border-color: $m-color-success;
+	}
+	.m-button__hairline--warning {
+		border-color: $m-color-warning;
+	}
+	.m-button__hairline--danger {
+		border-color: $m-color-danger;
+	}
+</style>

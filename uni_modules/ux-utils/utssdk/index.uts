@@ -53,7 +53,8 @@ export type { ToastFail, ModalFail, ModalResult } from './interface.uts'
 /** 默认展示时长（毫秒） */
 export const DEFAULT_DURATION: number = 1500
 /** 默认图标 */
-export const DEFAULT_ICON: ToastIcon = 'success'
+// 5.34 发行构建 uts-proxy 对导出字符串常量生成非法 JS（genInitCode 未加引号），暂不导出（全工程无消费方，上游修复后恢复）
+const DEFAULT_ICON: ToastIcon = 'success'
 /** 默认是否显示透明蒙层 */
 export const DEFAULT_MASK: boolean = false
 
@@ -105,13 +106,13 @@ export const showToastInfo: ShowToastQuick = function (title: string): void {
 
 /* 默认值常量 */
 /** 默认确认按钮文案 */
-export const DEFAULT_CONFIRM_TEXT: string = '确定'
+const DEFAULT_CONFIRM_TEXT: string = '确定'
 /** 默认取消按钮文案 */
-export const DEFAULT_CANCEL_TEXT: string = '取消'
+const DEFAULT_CANCEL_TEXT: string = '取消'
 /** 默认确认按钮颜色 */
-export const DEFAULT_CONFIRM_COLOR: string = '#007aff'
+const DEFAULT_CONFIRM_COLOR: string = '#007aff'
 /** 默认取消按钮颜色 */
-export const DEFAULT_CANCEL_COLOR: string = '#000000'
+const DEFAULT_CANCEL_COLOR: string = '#000000'
 
 /* API */
 /** 展示模态弹窗（回调式，与 uni.showModal 同构，迁移零成本） */

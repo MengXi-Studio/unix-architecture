@@ -70,10 +70,11 @@ export type {
 export const DEFAULT_TIMEOUT: number = 60000
 
 /** 默认请求方法 */
-export const DEFAULT_METHOD: RequestMethod = 'GET'
+// 5.34 发行构建 uts-proxy 对导出字符串常量生成非法 JS（genInitCode 未加引号），暂不导出（全工程无消费方，上游修复后恢复）
+const DEFAULT_METHOD: RequestMethod = 'GET'
 
 /** 统一错误 errSubject（RequestError.errSubject 固定值） */
-export const REQUEST_ERR_SUBJECT: string = 'unix-request'
+const REQUEST_ERR_SUBJECT: string = 'unix-request'
 
 /* ============ 默认实例 API（泛型导出） ============ */
 

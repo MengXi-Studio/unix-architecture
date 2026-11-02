@@ -1,0 +1,5 @@
+/**
+ * 加载类型（m-loading 定义，m-button 跨组件共享）
+ * circular 弧段圆环（匀速旋转）/ spinner 花瓣（12 条辐条亮度拖尾，离散旋转）
+ */
+export type LoadingType = 'circular' | 'spinner'

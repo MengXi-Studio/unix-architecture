@@ -2,7 +2,7 @@
 
 本页与仓库根 [CHANGELOG.md](https://github.com/MengXi-Studio/unix-architecture/blob/master/CHANGELOG.md) 保持同步。
 
-## [1.1.0] - 2026-11-01
+## [1.1.0] - 2026-11-02
 
 ### Added
 
